@@ -78,7 +78,7 @@ export function TemplatesPage() {
     .slice(0, 10)
 
   return (
-    <div className="flex flex-col min-h-dvh bg-gray-50">
+    <div className="flex flex-col h-dvh bg-gray-50">
       <div className="flex items-center justify-between px-4 pt-4 pb-3 bg-white border-b border-gray-100">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="text-gray-600 p-1 -ml-1">

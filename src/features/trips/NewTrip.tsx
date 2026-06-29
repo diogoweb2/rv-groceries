@@ -57,7 +57,7 @@ export function NewTrip() {
   }
 
   return (
-    <div className="flex flex-col min-h-dvh bg-gray-50">
+    <div className="flex flex-col h-dvh bg-gray-50">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-4 pb-3 bg-white border-b border-gray-100">
         <button onClick={() => navigate(-1)} className="text-gray-600 p-1">
@@ -66,7 +66,7 @@ export function NewTrip() {
         <h1 className="text-lg font-bold text-gray-800">New Trip</h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 flex flex-col gap-5 pb-28">
+      <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
         {/* Title */}
         <div>
           <label className="text-sm font-medium text-gray-700 mb-1.5 block">Trip name *</label>
@@ -141,7 +141,7 @@ export function NewTrip() {
       </form>
 
       {/* Sticky footer */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-4 pb-safe">
+      <div className="shrink-0 bg-white border-t border-gray-100 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <Button
           type="submit"
           size="lg"

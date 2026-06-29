@@ -36,7 +36,7 @@ export function StoresPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-dvh bg-gray-50">
+    <div className="flex flex-col h-dvh bg-gray-50">
       <div className="flex items-center justify-between px-4 pt-4 pb-3 bg-white border-b border-gray-100">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="text-gray-600 p-1 -ml-1">
@@ -47,7 +47,7 @@ export function StoresPage() {
         <Button size="icon" onClick={openAdd}><Plus className="w-5 h-5" /></Button>
       </div>
 
-      <div className="flex flex-col gap-2 p-4">
+      <div className="flex-1 overflow-y-auto flex flex-col gap-2 p-4">
         {stores.map(s => (
           <div key={s.id} className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3.5">
             <Store className="w-5 h-5 text-[#1e3a5f]" />

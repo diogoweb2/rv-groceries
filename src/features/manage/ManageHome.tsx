@@ -11,14 +11,14 @@ const sections = [
 export function ManageHome() {
   const navigate = useNavigate()
   return (
-    <div className="flex flex-col min-h-dvh bg-gray-50">
+    <div className="flex flex-col h-dvh bg-gray-50">
       <div className="flex items-center gap-3 px-4 pt-4 pb-3 bg-white border-b border-gray-100">
         <button onClick={() => navigate(-1)} className="text-gray-600 p-1 -ml-1">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-lg font-bold text-gray-800">Manage</h1>
       </div>
-      <div className="flex flex-col gap-3 p-4">
+      <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
         {sections.map(s => (
           <button
             key={s.path}

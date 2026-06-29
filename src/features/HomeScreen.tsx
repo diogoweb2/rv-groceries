@@ -1,18 +1,24 @@
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/lib/store'
-import { Tent, ShoppingCart, Settings } from 'lucide-react'
+import { Tent, ShoppingCart, Settings, Users } from 'lucide-react'
 
 export function HomeScreen() {
   const navigate = useNavigate()
   const identity = useAppStore(s => s.identity)
+  const clearIdentity = useAppStore(s => s.clearIdentity)
 
   return (
-    <div className="flex flex-col min-h-dvh bg-[#1e3a5f]">
+    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto bg-[#1e3a5f]">
       {/* Top */}
       <div className="flex items-center justify-between px-5 pt-12 pb-6">
         <div>
           <p className="text-blue-200 text-sm">Welcome back,</p>
-          <h1 className="text-3xl font-bold text-white capitalize">{identity}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl font-bold text-white capitalize">{identity}</h1>
+            <button onClick={clearIdentity} className="text-blue-300 opacity-60 hover:opacity-100 transition-opacity mt-1" title="Switch user">
+              <Users className="w-5 h-5" />
+            </button>
+          </div>
         </div>
         <button onClick={() => navigate('/manage')} className="text-blue-200 p-2">
           <Settings className="w-6 h-6" />

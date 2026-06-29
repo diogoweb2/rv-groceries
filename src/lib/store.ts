@@ -7,6 +7,7 @@ interface AppState {
   isAuthenticated: boolean
   fcmToken: string | null
   setIdentity: (identity: UserIdentity) => void
+  clearIdentity: () => void
   setAuthenticated: (val: boolean) => void
   setFcmToken: (token: string) => void
   logout: () => void
@@ -19,6 +20,7 @@ export const useAppStore = create<AppState>()(
       isAuthenticated: false,
       fcmToken: null,
       setIdentity: (identity) => set({ identity }),
+      clearIdentity: () => set({ identity: null }),
       setAuthenticated: (val) => set({ isAuthenticated: val }),
       setFcmToken: (token) => set({ fcmToken: token }),
       logout: () => set({ identity: null, isAuthenticated: false, fcmToken: null }),

@@ -71,7 +71,7 @@ export function GroceryHome() {
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-24">
+      <div className="flex-1 overflow-y-auto px-4 pb-4">
         {lists.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400">
             <ShoppingCart className="w-14 h-14 mb-3" strokeWidth={1.2} />

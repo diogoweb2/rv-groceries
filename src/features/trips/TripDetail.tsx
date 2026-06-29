@@ -73,7 +73,7 @@ export function TripDetail() {
   const phaseOrder = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
 
   return (
-    <div className="flex flex-col min-h-dvh bg-gray-50">
+    <div className="flex flex-col h-dvh bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-100">
         <div className="flex items-center gap-2 px-4 pt-4 pb-3">
@@ -122,7 +122,7 @@ export function TripDetail() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 pb-24 flex flex-col gap-6">
+      <div className="flex-1 overflow-y-auto px-4 py-4 pb-8 flex flex-col gap-6">
         {phaseOrder.map(phase => {
           const phaseLists = byPhase[phase]
           if (!phaseLists?.length) return null

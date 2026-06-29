@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   DndContext,
@@ -92,7 +92,7 @@ export function GroceryDetail() {
   const [sending, setSending] = useState(false)
 
   // Sync server items to local state (for drag-and-drop)
-  useMemo(() => { setItems(rawItems) }, [rawItems])
+  useEffect(() => { setItems(rawItems) }, [rawItems])
 
   const list = lists.find(l => l.id === id)
   const storeMap = Object.fromEntries(stores.map(s => [s.id, s.name]))
@@ -134,15 +134,16 @@ export function GroceryDetail() {
   }
 
   async function handleAddItem() {
-    if (!addQuery.trim()) return
-    const match = catalog.find(c => c.name.toLowerCase() === addQuery.toLowerCase().trim())
+    const name = addQuery.trim()
+    if (!name) return
+    const match = catalog.find(c => c.name.toLowerCase() === name.toLowerCase())
     await addGroceryItem(
       id!,
       {
         catalogItemId: match?.id,
-        name: addQuery.trim(),
-        qty: '',
         storeId: match?.defaultStoreId,
+        name,
+        qty: '',
         checked: false,
         order: items.length,
         rev: 1,
@@ -156,7 +157,7 @@ export function GroceryDetail() {
   }
 
   async function handleSend() {
-    if (!confirm('Send this list to Diogo?')) return
+    if (!confirm('Send this list?')) return
     setSending(true)
     await sendGroceryList(id!)
     setSending(false)
@@ -167,7 +168,7 @@ export function GroceryDetail() {
   const checked = items.filter(i => i.checked).length
 
   return (
-    <div className="flex flex-col min-h-dvh bg-gray-50">
+    <div className="flex flex-col h-dvh bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-100">
         <div className="flex items-center gap-2 px-4 pt-4 pb-3">
@@ -232,7 +233,7 @@ export function GroceryDetail() {
       )}
 
       {/* Drag-sortable list */}
-      <div className="flex-1 overflow-y-auto pb-24">
+      <div className="flex-1 overflow-y-auto pb-8">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={displayItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
             {displayItems.map(item => (

@@ -32,6 +32,16 @@ function docData<T>(snap: { id: string; data: () => Record<string, unknown> }): 
   return { id: snap.id, ...d } as T
 }
 
+// Firestore rejects any field whose value is `undefined`. Strip them so callers
+// can pass optional fields (e.g. storeId, catalogItemId) without crashing.
+function clean<T extends Record<string, unknown>>(obj: T): T {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) out[k] = v
+  }
+  return out as T
+}
+
 // ── Amenities ─────────────────────────────────────────────────────────────────
 
 export function subscribeAmenities(cb: (items: Amenity[]) => void) {
@@ -164,15 +174,15 @@ export async function addItem(
   data: Omit<ChecklistItem, 'id' | 'tripId' | 'checklistId'>,
   identity: UserIdentity
 ) {
-  return addDoc(collection(db, 'trips', tripId, 'checklists', checklistId, 'items'), {
+  return addDoc(collection(db, 'trips', tripId, 'checklists', checklistId, 'items'), clean({
     ...data,
     tripId,
     checklistId,
     rev: 1,
     baseRev: 0,
     updatedBy: identity,
-    updatedAt: toDate(serverTimestamp()),
-  })
+    updatedAt: new Date().toISOString(),
+  }))
 }
 
 export async function toggleItem(
@@ -200,13 +210,13 @@ export async function updateItem(
   identity: UserIdentity,
   currentRev: number
 ) {
-  return updateDoc(doc(db, 'trips', tripId, 'checklists', checklistId, 'items', itemId), {
+  return updateDoc(doc(db, 'trips', tripId, 'checklists', checklistId, 'items', itemId), clean({
     ...data,
     updatedBy: identity,
     updatedAt: new Date().toISOString(),
     baseRev: currentRev,
     rev: currentRev + 1,
-  })
+  }))
 }
 
 export async function deleteItem(tripId: string, checklistId: string, itemId: string) {
@@ -335,14 +345,14 @@ export async function addGroceryItem(
   data: Omit<GroceryItem, 'id' | 'listId'>,
   identity: UserIdentity
 ) {
-  return addDoc(collection(db, 'groceryLists', listId, 'items'), {
+  return addDoc(collection(db, 'groceryLists', listId, 'items'), clean({
     ...data,
     listId,
     rev: 1,
     baseRev: 0,
     updatedBy: identity,
     updatedAt: new Date().toISOString(),
-  })
+  }))
 }
 
 export async function updateGroceryItem(
@@ -352,13 +362,13 @@ export async function updateGroceryItem(
   identity: UserIdentity,
   currentRev: number
 ) {
-  return updateDoc(doc(db, 'groceryLists', listId, 'items', itemId), {
+  return updateDoc(doc(db, 'groceryLists', listId, 'items', itemId), clean({
     ...data,
     updatedBy: identity,
     updatedAt: new Date().toISOString(),
     baseRev: currentRev,
     rev: currentRev + 1,
-  })
+  }))
 }
 
 export async function deleteGroceryItem(listId: string, itemId: string) {

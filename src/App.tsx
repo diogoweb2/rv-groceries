@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthGate } from '@/auth/AuthGate'
-import { BottomNav } from '@/components/BottomNav'
+import { TabLayout } from '@/components/TabLayout'
 import { HomeScreen } from '@/features/HomeScreen'
 import { TripsList } from '@/features/trips/TripsList'
 import { NewTrip } from '@/features/trips/NewTrip'
@@ -17,30 +17,28 @@ export default function App() {
   return (
     <AuthGate>
       <BrowserRouter>
-        <div className="flex flex-col flex-1 relative">
-          <Routes>
+        <Routes>
+          {/* Top-level tabs — these show the bottom navigation bar */}
+          <Route element={<TabLayout />}>
             <Route path="/" element={<HomeScreen />} />
-
-            {/* Camping */}
             <Route path="/trips" element={<TripsList />} />
-            <Route path="/trips/new" element={<NewTrip />} />
-            <Route path="/trips/:id" element={<TripDetail />} />
-
-            {/* Grocery */}
             <Route path="/grocery" element={<GroceryHome />} />
-            <Route path="/grocery/:id" element={<GroceryDetail />} />
+          </Route>
 
-            {/* Manage */}
-            <Route path="/manage" element={<ManageHome />} />
-            <Route path="/manage/amenities" element={<AmenitiesPage />} />
-            <Route path="/manage/stores" element={<StoresPage />} />
-            <Route path="/manage/catalog" element={<CatalogPage />} />
-            <Route path="/manage/templates" element={<TemplatesPage />} />
+          {/* Full-screen pushed screens — no tab bar, own back button */}
+          <Route path="/trips/new" element={<NewTrip />} />
+          <Route path="/trips/:id" element={<TripDetail />} />
+          <Route path="/grocery/:id" element={<GroceryDetail />} />
 
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-          <BottomNav />
-        </div>
+          {/* Manage */}
+          <Route path="/manage" element={<ManageHome />} />
+          <Route path="/manage/amenities" element={<AmenitiesPage />} />
+          <Route path="/manage/stores" element={<StoresPage />} />
+          <Route path="/manage/catalog" element={<CatalogPage />} />
+          <Route path="/manage/templates" element={<TemplatesPage />} />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </BrowserRouter>
     </AuthGate>
   )

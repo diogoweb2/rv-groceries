@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
 import { signInWithEmailAndPassword } from 'firebase/auth'
-import { auth } from '@/lib/firebase'
+import { getToken } from 'firebase/messaging'
+import { auth, getMessagingInstance } from '@/lib/firebase'
 import { useAppStore } from '@/lib/store'
 import type { UserIdentity } from '@/types'
 import { Tent, ShoppingCart, Loader2 } from 'lucide-react'
+
+const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string
 
 // Shared app password is checked locally, then a Firebase anonymous-equivalent
 // email/pass account is used. The email/pass combo is stored in env vars.
@@ -12,7 +15,7 @@ const FIREBASE_PASSWORD = import.meta.env.VITE_APP_PASSWORD as string
 const APP_PIN = import.meta.env.VITE_APP_PIN as string
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, identity, setAuthenticated, setIdentity } = useAppStore()
+  const { isAuthenticated, identity, setAuthenticated, setIdentity, setFcmToken } = useAppStore()
   const [step, setStep] = useState<'pin' | 'identity' | 'done'>('pin')
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
@@ -38,9 +41,19 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }
 
-  function pickIdentity(id: UserIdentity) {
+  async function pickIdentity(id: UserIdentity) {
     setIdentity(id)
     setStep('done')
+    try {
+      const messaging = await getMessagingInstance()
+      if (!messaging) return
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') return
+      const token = await getToken(messaging, { vapidKey: VAPID_KEY })
+      if (token) setFcmToken(token)
+    } catch {
+      // notifications not critical — silently ignore
+    }
   }
 
   if (step === 'done') return <>{children}</>

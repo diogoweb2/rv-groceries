@@ -12,11 +12,8 @@ export function BottomNav() {
   const location = useLocation()
   const navigate = useNavigate()
 
-  const isManage = location.pathname.startsWith('/manage')
-  if (isManage) return null
-
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 flex pb-safe">
+    <nav className="shrink-0 bg-white border-t border-gray-100 flex pb-[env(safe-area-inset-bottom)]">
       {TABS.map(tab => {
         const active = tab.exact
           ? location.pathname === tab.path
@@ -26,7 +23,7 @@ export function BottomNav() {
             key={tab.path}
             onClick={() => navigate(tab.path)}
             className={cn(
-              'flex-1 flex flex-col items-center gap-1 py-3 transition-colors',
+              'flex-1 flex flex-col items-center gap-1 py-2.5 transition-colors',
               active ? 'text-[#1e3a5f]' : 'text-gray-400'
             )}
           >
@@ -35,6 +32,6 @@ export function BottomNav() {
           </button>
         )
       })}
-    </div>
+    </nav>
   )
 }
