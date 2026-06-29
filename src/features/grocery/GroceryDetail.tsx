@@ -18,7 +18,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useGroceryLists, useGroceryItems, useStores, useCatalog } from '@/hooks/useFirestore'
-import { updateGroceryItem, deleteGroceryItem, addGroceryItem, sendGroceryList, saveSortOrder } from '@/lib/firestore'
+import { updateGroceryItem, deleteGroceryItem, addGroceryItem, sendGroceryList, saveSortOrder, ensureCatalogItem } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -107,6 +107,24 @@ export function GroceryDetail() {
     ? items.filter(i => i.storeId === storeFilter)
     : items
 
+  // Catalog-backed autocomplete for the add bar
+  const addQ = addQuery.trim().toLowerCase()
+  const existingNames = new Set(items.map(i => i.name.toLowerCase()))
+  const seenSuggestions = new Set<string>()
+  const addSuggestions = addQ
+    ? catalog
+        .filter(c => c.name.toLowerCase().includes(addQ))
+        .filter(c => !existingNames.has(c.name.toLowerCase()))
+        .sort((a, b) => (b.stats?.totalGrocery ?? 0) - (a.stats?.totalGrocery ?? 0))
+        .filter(c => {
+          const key = c.name.toLowerCase()
+          if (seenSuggestions.has(key)) return false
+          seenSuggestions.add(key)
+          return true
+        })
+        .slice(0, 6)
+    : []
+
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -133,8 +151,8 @@ export function GroceryDetail() {
     await deleteGroceryItem(id!, itemId)
   }
 
-  async function handleAddItem() {
-    const name = addQuery.trim()
+  async function handleAddItem(explicitName?: string) {
+    const name = (explicitName ?? addQuery).trim()
     if (!name) return
     const match = catalog.find(c => c.name.toLowerCase() === name.toLowerCase())
     await addGroceryItem(
@@ -153,6 +171,8 @@ export function GroceryDetail() {
       },
       identity
     )
+    // Remember new names globally for future autocomplete.
+    if (!match) await ensureCatalogItem(catalog, name, 'grocery')
     setAddQuery('')
   }
 
@@ -214,21 +234,36 @@ export function GroceryDetail() {
 
       {/* Add item bar */}
       {!isSent && (
-        <div className="flex gap-2 px-4 py-3 bg-white border-b border-gray-100">
-          <Input
-            value={addQuery}
-            onChange={e => setAddQuery(e.target.value)}
-            placeholder="Add item…"
-            onKeyDown={e => e.key === 'Enter' && handleAddItem()}
-            className="flex-1"
-          />
-          <button
-            onClick={handleAddItem}
-            disabled={!addQuery.trim()}
-            className="bg-[#1e3a5f] text-white rounded-xl px-3 disabled:opacity-40"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
+        <div className="bg-white border-b border-gray-100">
+          <div className="flex gap-2 px-4 py-3">
+            <Input
+              value={addQuery}
+              onChange={e => setAddQuery(e.target.value)}
+              placeholder="Add item…"
+              onKeyDown={e => e.key === 'Enter' && handleAddItem()}
+              className="flex-1"
+            />
+            <button
+              onClick={() => handleAddItem()}
+              disabled={!addQuery.trim()}
+              className="bg-[#1e3a5f] text-white rounded-xl px-3 disabled:opacity-40"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+          </div>
+          {addSuggestions.length > 0 && (
+            <div className="px-4 pb-2 flex flex-wrap gap-2">
+              {addSuggestions.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => handleAddItem(c.name)}
+                  className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-700 text-sm hover:bg-gray-200"
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

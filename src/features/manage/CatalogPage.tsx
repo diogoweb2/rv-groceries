@@ -75,7 +75,7 @@ export function CatalogPage() {
           <button onClick={() => navigate(-1)} className="text-gray-600 p-1 -ml-1">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-lg font-bold text-gray-800">Item catalog</h1>
+          <h1 className="text-lg font-bold text-gray-800">Saved items</h1>
         </div>
         <Button size="icon" onClick={openAdd}><Plus className="w-5 h-5" /></Button>
       </div>

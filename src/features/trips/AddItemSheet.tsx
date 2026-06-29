@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useCatalog, useStores, useChecklistItems } from '@/hooks/useFirestore'
-import { addItem } from '@/lib/firestore'
+import { addItem, ensureCatalogItem } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Sheet } from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
@@ -27,10 +27,17 @@ export function AddItemSheet({ tripId, checklistId, onClose }: Props) {
 
   const suggestions = useMemo(() => {
     const q = query.toLowerCase().trim()
+    const seen = new Set<string>()
     return catalog
       .filter(item => !existingNames.has(item.name.toLowerCase()))
       .filter(item => !q || item.name.toLowerCase().includes(q))
-      .sort((a, b) => b.stats.totalUsed - a.stats.totalUsed)
+      .sort((a, b) => (b.stats?.totalUsed ?? 0) - (a.stats?.totalUsed ?? 0))
+      .filter(item => {
+        const key = item.name.toLowerCase()
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
       .slice(0, 20)
   }, [catalog, query, existingNames])
 
@@ -53,10 +60,11 @@ export function AddItemSheet({ tripId, checklistId, onClose }: Props) {
   }
 
   async function addCustomItem() {
-    if (!query.trim()) return
+    const name = query.trim()
+    if (!name) return
     setSaving(true)
     await addItem(tripId, checklistId, {
-      name: query.trim(),
+      name,
       qty: '',
       checked: false,
       order: existingItems.length,
@@ -65,11 +73,21 @@ export function AddItemSheet({ tripId, checklistId, onClose }: Props) {
       updatedBy: identity,
       updatedAt: new Date().toISOString(),
     }, identity)
+    // Remember it globally for future autocomplete.
+    await ensureCatalogItem(catalog, name, 'camping')
     setSaving(false)
     setQuery('')
   }
 
   const hasExact = catalog.some(c => c.name.toLowerCase() === query.toLowerCase().trim())
+
+  function handleEnter() {
+    const q = query.trim()
+    if (!q || saving) return
+    const exact = catalog.find(c => c.name.toLowerCase() === q.toLowerCase())
+    if (exact) addCatalogItem(exact)
+    else addCustomItem()
+  }
 
   return (
     <Sheet open onClose={onClose} title="Add item">
@@ -79,6 +97,7 @@ export function AddItemSheet({ tripId, checklistId, onClose }: Props) {
           <Input
             value={query}
             onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleEnter()}
             placeholder="Search or type new item..."
             className="pl-9"
             autoFocus

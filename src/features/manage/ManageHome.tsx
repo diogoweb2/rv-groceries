@@ -4,7 +4,7 @@ import { ArrowLeft, Tag, Store, BookOpen, Waves } from 'lucide-react'
 const sections = [
   { label: 'Amenities', description: 'Beach, pool, tennis…', icon: Waves, path: '/manage/amenities' },
   { label: 'Stores', description: 'Lidl, Aldi, pharmacy…', icon: Store, path: '/manage/stores' },
-  { label: 'Item catalog', description: 'Master list of items', icon: Tag, path: '/manage/catalog' },
+  { label: 'Saved items', description: 'Autocomplete list — remove unused items', icon: Tag, path: '/manage/catalog' },
   { label: 'Templates', description: 'Reusable checklists', icon: BookOpen, path: '/manage/templates' },
 ]
 

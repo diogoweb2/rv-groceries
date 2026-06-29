@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTrips, useAmenities } from '@/hooks/useFirestore'
+import { deleteTrip } from '@/lib/firestore'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Plus, Tent, ChevronRight, CalendarDays } from 'lucide-react'
+import { Plus, Tent, Trash2, CalendarDays } from 'lucide-react'
 import type { Trip } from '@/types'
 
 const STATUS_BADGE: Record<Trip['status'], { label: string; variant: 'default' | 'success' | 'warning' | 'info' }> = {
@@ -22,6 +23,12 @@ export function TripsList() {
   const trips = useTrips()
   const amenities = useAmenities()
   const [filter, setFilter] = useState<'upcoming' | 'all'>('upcoming')
+
+  async function handleDelete(e: React.MouseEvent, id: string) {
+    e.stopPropagation()
+    if (!confirm('Delete this trip? This cannot be undone.')) return
+    await deleteTrip(id)
+  }
 
   const amenityMap = Object.fromEntries(amenities.map(a => [a.id, a]))
   const now = new Date().toISOString().slice(0, 10)
@@ -65,10 +72,10 @@ export function TripsList() {
             {visible.map(trip => {
               const badge = STATUS_BADGE[trip.status]
               return (
-                <button
+                <div
                   key={trip.id}
                   onClick={() => navigate(`/trips/${trip.id}`)}
-                  className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-left flex items-start gap-3 active:bg-gray-50"
+                  className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-left flex items-start gap-3 active:bg-gray-50 cursor-pointer"
                 >
                   <div className="bg-blue-50 rounded-xl p-2.5 mt-0.5">
                     <Tent className="w-5 h-5 text-[#1e3a5f]" />
@@ -95,8 +102,14 @@ export function TripsList() {
                       </div>
                     )}
                   </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400 mt-0.5 shrink-0" />
-                </button>
+                  <button
+                    onClick={e => handleDelete(e, trip.id)}
+                    className="text-gray-300 hover:text-red-500 p-1 mt-0.5 shrink-0"
+                    aria-label="Delete trip"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               )
             })}
           </div>

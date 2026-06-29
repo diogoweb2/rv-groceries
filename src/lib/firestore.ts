@@ -12,6 +12,7 @@ import {
   writeBatch,
   getDocs,
   getDoc,
+  collectionGroup,
 } from 'firebase/firestore'
 import { db } from './firebase'
 import type {
@@ -102,6 +103,91 @@ export async function deleteCatalogItem(id: string) {
   return deleteDoc(doc(db, 'itemCatalog', id))
 }
 
+// Make sure a typed item name exists in the global catalog so it becomes an
+// autocomplete suggestion everywhere. No-op if a matching name already exists.
+// `catalog` is the already-loaded list, so this avoids an extra read.
+export async function ensureCatalogItem(
+  catalog: CatalogItem[],
+  name: string,
+  category: CatalogItem['category'],
+  defaultStoreId?: string,
+) {
+  const trimmed = name.trim()
+  if (!trimmed) return
+  if (catalog.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) return
+  await addDoc(collection(db, 'itemCatalog'), clean({
+    name: trimmed,
+    category,
+    defaultStoreId,
+    stats: { totalUsed: 0, totalGrocery: 0, byAmenity: {}, lastGrocerySortIndex: {} },
+  }))
+}
+
+// Merge duplicate-name catalog entries, keeping the most-used one and deleting
+// the rest. Returns how many duplicates were removed.
+export async function dedupeCatalog(): Promise<number> {
+  const snap = await getDocs(collection(db, 'itemCatalog'))
+  const groups = new Map<string, (typeof snap.docs)[number][]>()
+  snap.docs.forEach((d) => {
+    const key = ((d.data().name as string) ?? '').trim().toLowerCase()
+    if (!key) return
+    const arr = groups.get(key) ?? []
+    arr.push(d)
+    groups.set(key, arr)
+  })
+
+  const batch = writeBatch(db)
+  let removed = 0
+  groups.forEach((docs) => {
+    if (docs.length < 2) return
+    docs.sort(
+      (a, b) =>
+        ((b.data().stats?.totalUsed as number) ?? 0) -
+        ((a.data().stats?.totalUsed as number) ?? 0)
+    )
+    docs.slice(1).forEach((d) => { batch.delete(d.ref); removed++ })
+  })
+
+  if (removed > 0) await batch.commit()
+  return removed
+}
+
+// One-time seed: register every item name already used across all trip
+// checklists and grocery lists into the global catalog, so older items also
+// become autocomplete suggestions. Idempotent — only adds missing names.
+export async function backfillCatalogFromItems(): Promise<number> {
+  const [catalogSnap, itemsSnap] = await Promise.all([
+    getDocs(collection(db, 'itemCatalog')),
+    getDocs(collectionGroup(db, 'items')),
+  ])
+
+  const known = new Set(
+    catalogSnap.docs.map((d) => ((d.data().name as string) ?? '').trim().toLowerCase())
+  )
+  const toAdd = new Map<string, { name: string; category: CatalogItem['category'] }>()
+
+  itemsSnap.forEach((d) => {
+    const name = ((d.data().name as string) ?? '').trim()
+    if (!name) return
+    const key = name.toLowerCase()
+    if (known.has(key) || toAdd.has(key)) return
+    const isGrocery = d.ref.path.startsWith('groceryLists/')
+    toAdd.set(key, { name, category: isGrocery ? 'grocery' : 'camping' })
+  })
+
+  if (toAdd.size === 0) return 0
+  const batch = writeBatch(db)
+  toAdd.forEach((v) => {
+    batch.set(doc(collection(db, 'itemCatalog')), {
+      name: v.name,
+      category: v.category,
+      stats: { totalUsed: 0, totalGrocery: 0, byAmenity: {}, lastGrocerySortIndex: {} },
+    })
+  })
+  await batch.commit()
+  return toAdd.size
+}
+
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 export function subscribeTemplates(cb: (items: Template[]) => void) {
@@ -140,7 +226,16 @@ export async function updateTrip(id: string, data: Partial<Trip>) {
 }
 
 export async function deleteTrip(id: string) {
-  return deleteDoc(doc(db, 'trips', id))
+  // Remove nested checklists and their items, then the trip itself.
+  const batch = writeBatch(db)
+  const checklistsSnap = await getDocs(collection(db, 'trips', id, 'checklists'))
+  for (const cl of checklistsSnap.docs) {
+    const itemsSnap = await getDocs(collection(db, 'trips', id, 'checklists', cl.id, 'items'))
+    itemsSnap.forEach((item) => batch.delete(item.ref))
+    batch.delete(cl.ref)
+  }
+  batch.delete(doc(db, 'trips', id))
+  await batch.commit()
 }
 
 // ── Checklists ────────────────────────────────────────────────────────────────
@@ -154,6 +249,19 @@ export function subscribeChecklists(tripId: string, cb: (lists: Checklist[]) => 
 
 export async function addChecklist(tripId: string, data: Omit<Checklist, 'id' | 'tripId'>) {
   return addDoc(collection(db, 'trips', tripId, 'checklists'), { ...data, tripId })
+}
+
+export async function updateChecklist(tripId: string, checklistId: string, data: Partial<Checklist>) {
+  return updateDoc(doc(db, 'trips', tripId, 'checklists', checklistId), clean(data))
+}
+
+export async function deleteChecklist(tripId: string, checklistId: string) {
+  // Clear the items subcollection before removing the checklist document.
+  const itemsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists', checklistId, 'items'))
+  const batch = writeBatch(db)
+  itemsSnap.forEach((d) => batch.delete(d.ref))
+  batch.delete(doc(db, 'trips', tripId, 'checklists', checklistId))
+  await batch.commit()
 }
 
 // ── Checklist Items ────────────────────────────────────────────────────────────
@@ -331,6 +439,15 @@ export async function sendGroceryList(id: string) {
     status: 'sent',
     sentAt: new Date().toISOString(),
   })
+}
+
+export async function deleteGroceryList(id: string) {
+  // Deleting a document does not remove its subcollection, so clear items first.
+  const itemsSnap = await getDocs(collection(db, 'groceryLists', id, 'items'))
+  const batch = writeBatch(db)
+  itemsSnap.forEach((d) => batch.delete(d.ref))
+  batch.delete(doc(db, 'groceryLists', id))
+  await batch.commit()
 }
 
 export function subscribeGroceryItems(listId: string, cb: (items: GroceryItem[]) => void) {

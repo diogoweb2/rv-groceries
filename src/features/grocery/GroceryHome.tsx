@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGroceryLists, useCatalog } from '@/hooks/useFirestore'
-import { addGroceryList, addGroceryItem } from '@/lib/firestore'
+import { addGroceryList, addGroceryItem, deleteGroceryList } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Plus, ShoppingCart, ChevronRight, Send } from 'lucide-react'
+import { Plus, ShoppingCart, Send, Trash2 } from 'lucide-react'
 
 function formatDate(d: unknown) {
   if (!d) return ''
@@ -59,6 +59,12 @@ export function GroceryHome() {
     navigate(`/grocery/${ref.id}`)
   }
 
+  async function handleDelete(e: React.MouseEvent, id: string) {
+    e.stopPropagation()
+    if (!confirm('Delete this list? This cannot be undone.')) return
+    await deleteGroceryList(id)
+  }
+
   const drafts = lists.filter(l => l.status === 'draft')
   const sent = lists.filter(l => l.status === 'sent')
 
@@ -85,10 +91,10 @@ export function GroceryHome() {
                 <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Draft</p>
                 <div className="flex flex-col gap-3">
                   {drafts.map(list => (
-                    <button
+                    <div
                       key={list.id}
                       onClick={() => navigate(`/grocery/${list.id}`)}
-                      className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 text-left active:bg-gray-50"
+                      className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 text-left active:bg-gray-50 cursor-pointer"
                     >
                       <div className="bg-pink-50 rounded-xl p-2.5">
                         <ShoppingCart className="w-5 h-5 text-pink-500" />
@@ -98,8 +104,14 @@ export function GroceryHome() {
                         <p className="text-sm text-gray-500">{formatDate(list.createdAt)}</p>
                       </div>
                       <Badge variant="warning">Draft</Badge>
-                      <ChevronRight className="w-5 h-5 text-gray-400" />
-                    </button>
+                      <button
+                        onClick={e => handleDelete(e, list.id)}
+                        className="text-gray-300 hover:text-red-500 p-1 shrink-0"
+                        aria-label="Delete list"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -110,10 +122,10 @@ export function GroceryHome() {
                 <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Sent</p>
                 <div className="flex flex-col gap-3">
                   {sent.slice(0, 5).map(list => (
-                    <button
+                    <div
                       key={list.id}
                       onClick={() => navigate(`/grocery/${list.id}`)}
-                      className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 text-left active:bg-gray-50 opacity-75"
+                      className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 text-left active:bg-gray-50 opacity-75 cursor-pointer"
                     >
                       <div className="bg-green-50 rounded-xl p-2.5">
                         <Send className="w-5 h-5 text-green-500" />
@@ -123,8 +135,14 @@ export function GroceryHome() {
                         <p className="text-sm text-gray-500">{formatDate(list.sentAt ?? list.createdAt)}</p>
                       </div>
                       <Badge variant="success">Sent</Badge>
-                      <ChevronRight className="w-5 h-5 text-gray-400" />
-                    </button>
+                      <button
+                        onClick={e => handleDelete(e, list.id)}
+                        className="text-gray-300 hover:text-red-500 p-1 shrink-0"
+                        aria-label="Delete list"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>

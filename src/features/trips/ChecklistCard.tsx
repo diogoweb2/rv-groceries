@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useChecklistItems } from '@/hooks/useFirestore'
-import { toggleItem, deleteItem } from '@/lib/firestore'
+import { toggleItem, deleteItem, updateChecklist, deleteChecklist } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Progress } from '@/components/ui/progress'
-import { Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Plus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil } from 'lucide-react'
 import type { Checklist } from '@/types'
 
 interface Props {
@@ -16,6 +19,8 @@ export function ChecklistCard({ checklist, tripId, onAddItem }: Props) {
   const identity = useAppStore(s => s.identity)!
   const items = useChecklistItems(tripId, checklist.id)
   const [expanded, setExpanded] = useState(true)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [renaming, setRenaming] = useState<string | null>(null)
 
   const checked = items.filter(i => i.checked).length
   const total = items.length
@@ -29,28 +34,66 @@ export function ChecklistCard({ checklist, tripId, onAddItem }: Props) {
     await deleteItem(tripId, checklist.id, itemId)
   }
 
+  async function handleRename() {
+    if (renaming === null || !renaming.trim()) return
+    await updateChecklist(tripId, checklist.id, { name: renaming.trim() })
+    setRenaming(null)
+  }
+
+  async function handleDeleteChecklist() {
+    setMenuOpen(false)
+    if (!confirm(`Delete checklist "${checklist.name}" and all its items?`)) return
+    await deleteChecklist(tripId, checklist.id)
+  }
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
       {/* Card header */}
-      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+      <div className="flex items-start gap-2 px-4 pt-4 pb-3">
         <button
-          className="flex-1 text-left"
+          className="flex-1 min-w-0 text-left"
           onClick={() => setExpanded(v => !v)}
         >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="font-semibold text-gray-800">{checklist.name}</span>
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <span className="font-semibold text-gray-800 truncate">{checklist.name}</span>
+            <div className="flex items-center gap-2 shrink-0">
               <span className="text-sm text-gray-500">{checked}/{total}</span>
               {expanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
             </div>
           </div>
           <Progress value={progress} />
         </button>
+
+        {/* Checklist menu */}
+        <div className="relative shrink-0 -mr-1">
+          <button onClick={() => setMenuOpen(v => !v)} className="p-1 text-gray-400 hover:text-gray-600">
+            <MoreVertical className="w-5 h-5" />
+          </button>
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 top-full z-20 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-36">
+                <button
+                  onClick={() => { setMenuOpen(false); setRenaming(checklist.name) }}
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <Pencil className="w-4 h-4" /> Rename
+                </button>
+                <button
+                  onClick={handleDeleteChecklist}
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-gray-50"
+                >
+                  <Trash2 className="w-4 h-4" /> Delete
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Items */}
       {expanded && (
-        <div className="border-t border-gray-50">
+        <div className="border-t border-gray-50 rounded-b-2xl overflow-hidden">
           {items.map(item => (
             <div
               key={item.id}
@@ -105,6 +148,23 @@ export function ChecklistCard({ checklist, tripId, onAddItem }: Props) {
           </button>
         </div>
       )}
+
+      {/* Rename dialog */}
+      <Dialog open={renaming !== null} onClose={() => setRenaming(null)} title="Rename checklist">
+        <div className="flex flex-col gap-4">
+          <Input
+            value={renaming ?? ''}
+            onChange={e => setRenaming(e.target.value)}
+            placeholder="Checklist name"
+            autoFocus
+            onKeyDown={e => e.key === 'Enter' && handleRename()}
+          />
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setRenaming(null)}>Cancel</Button>
+            <Button className="flex-1" onClick={handleRename} disabled={!renaming?.trim()}>Save</Button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   )
 }

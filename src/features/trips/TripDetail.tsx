@@ -1,13 +1,25 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTrips, useChecklists } from '@/hooks/useFirestore'
-import { updateTrip, deleteTrip, recordTripStats } from '@/lib/firestore'
+import { updateTrip, deleteTrip, recordTripStats, addChecklist } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { ChecklistCard } from './ChecklistCard'
 import { AddItemSheet } from './AddItemSheet'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle } from 'lucide-react'
-import type { Trip } from '@/types'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Dialog } from '@/components/ui/dialog'
+import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, Plus } from 'lucide-react'
+import type { Trip, ChecklistPhase } from '@/types'
+
+const PHASES: { value: ChecklistPhase; label: string }[] = [
+  { value: 'pre_early', label: 'Before the trip' },
+  { value: 'pre_dayof', label: 'Day of departure' },
+  { value: 'pack_down', label: 'Pack down / return' },
+  { value: 'grocery', label: 'Groceries' },
+]
+
+const phaseOrder: ChecklistPhase[] = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
 
 const PHASE_LABELS: Record<string, string> = {
   pre_early: 'Before the trip',
@@ -35,6 +47,8 @@ export function TripDetail() {
   const identity = useAppStore(s => s.identity)!
   const [menuOpen, setMenuOpen] = useState(false)
   const [addingTo, setAddingTo] = useState<string | null>(null)
+  const [newChecklist, setNewChecklist] = useState<{ name: string; phase: ChecklistPhase } | null>(null)
+  const [savingChecklist, setSavingChecklist] = useState(false)
 
   const trip = trips.find(t => t.id === id)
   if (!trip) return (
@@ -63,14 +77,24 @@ export function TripDetail() {
     setMenuOpen(false)
   }
 
+  async function handleAddChecklist() {
+    if (!newChecklist?.name.trim()) return
+    setSavingChecklist(true)
+    await addChecklist(id!, {
+      name: newChecklist.name.trim(),
+      phase: newChecklist.phase,
+      order: phaseOrder.indexOf(newChecklist.phase),
+    })
+    setSavingChecklist(false)
+    setNewChecklist(null)
+  }
+
   // Group checklists by phase
   const byPhase = checklists.reduce<Record<string, typeof checklists>>((acc, cl) => {
     if (!acc[cl.phase]) acc[cl.phase] = []
     acc[cl.phase].push(cl)
     return acc
   }, {})
-
-  const phaseOrder = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
 
   return (
     <div className="flex flex-col h-dvh bg-gray-50">
@@ -146,11 +170,20 @@ export function TripDetail() {
         })}
 
         {checklists.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
             <p className="text-base font-medium">No checklists yet</p>
-            <p className="text-sm">This trip has no checklists attached</p>
+            <p className="text-sm">Add one below to get started</p>
           </div>
         )}
+
+        {/* Add checklist */}
+        <button
+          onClick={() => setNewChecklist({ name: '', phase: 'pre_early' })}
+          className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl border-2 border-dashed border-gray-200 text-[#1e3a5f] font-medium hover:bg-blue-50 transition-colors"
+        >
+          <Plus className="w-5 h-5" />
+          Add checklist
+        </button>
       </div>
 
       {/* Add Item Sheet */}
@@ -161,6 +194,42 @@ export function TripDetail() {
           onClose={() => setAddingTo(null)}
         />
       )}
+
+      {/* New checklist dialog */}
+      <Dialog open={!!newChecklist} onClose={() => setNewChecklist(null)} title="New checklist">
+        {newChecklist && (
+          <div className="flex flex-col gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Name</label>
+              <Input
+                value={newChecklist.name}
+                onChange={e => setNewChecklist({ ...newChecklist, name: e.target.value })}
+                placeholder="e.g. Kitchen gear"
+                autoFocus
+                onKeyDown={e => e.key === 'Enter' && handleAddChecklist()}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-2 block">Section</label>
+              <div className="grid grid-cols-2 gap-2">
+                {PHASES.map(p => (
+                  <button
+                    key={p.value}
+                    onClick={() => setNewChecklist({ ...newChecklist, phase: p.value })}
+                    className={`py-2.5 px-3 rounded-xl text-sm font-medium border-2 transition-colors ${newChecklist.phase === p.value ? 'border-[#1e3a5f] bg-[#1e3a5f] text-white' : 'border-gray-200 text-gray-600'}`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setNewChecklist(null)}>Cancel</Button>
+              <Button className="flex-1" onClick={handleAddChecklist} disabled={savingChecklist || !newChecklist.name.trim()}>Add</Button>
+            </div>
+          </div>
+        )}
+      </Dialog>
     </div>
   )
 }

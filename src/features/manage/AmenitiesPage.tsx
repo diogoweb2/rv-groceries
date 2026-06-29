@@ -72,7 +72,8 @@ export function AmenitiesPage() {
         <div className="flex flex-col gap-4">
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1.5 block">Name</label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Beach" autoFocus />
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Beach" autoFocus
+              onKeyDown={e => e.key === 'Enter' && handleSave()} />
           </div>
           <div>
             <label className="text-sm font-medium text-gray-700 mb-2 block">Icon</label>
