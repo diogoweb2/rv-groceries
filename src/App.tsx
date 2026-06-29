@@ -1,14 +1,17 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthGate } from '@/auth/AuthGate'
-import { backfillCatalogFromItems, dedupeCatalog } from '@/lib/firestore'
+import { backfillCatalogFromItems, dedupeCatalog, syncTripStatuses } from '@/lib/firestore'
+import { useTrips } from '@/hooks/useFirestore'
+import { useAppStore } from '@/lib/store'
 import { TabLayout } from '@/components/TabLayout'
 import { HomeScreen } from '@/features/HomeScreen'
 import { TripsList } from '@/features/trips/TripsList'
 import { NewTrip } from '@/features/trips/NewTrip'
 import { TripDetail } from '@/features/trips/TripDetail'
-import { GroceryHome } from '@/features/grocery/GroceryHome'
-import { GroceryDetail } from '@/features/grocery/GroceryDetail'
+// Supermarket (top-level grocery) disabled for now — keep imports/routes commented to re-enable.
+// import { GroceryHome } from '@/features/grocery/GroceryHome'
+// import { GroceryDetail } from '@/features/grocery/GroceryDetail'
 import { ManageHome } from '@/features/manage/ManageHome'
 import { AmenitiesPage } from '@/features/manage/AmenitiesPage'
 import { StoresPage } from '@/features/manage/StoresPage'
@@ -33,23 +36,39 @@ function CatalogSync() {
   return null
 }
 
+// Advances trips to their date-derived status (active the day before start,
+// completed the day after end) whenever the trip list changes. Forward-only and
+// idempotent — see syncTripStatuses.
+function TripStatusSync() {
+  const trips = useTrips()
+  const identity = useAppStore(s => s.identity)
+  useEffect(() => {
+    if (!identity || trips.length === 0) return
+    syncTripStatuses(trips, identity).catch(() => {
+      /* non-critical — retries on next snapshot */
+    })
+  }, [trips, identity])
+  return null
+}
+
 export default function App() {
   return (
     <AuthGate>
       <BrowserRouter>
         <CatalogSync />
+        <TripStatusSync />
         <Routes>
           {/* Top-level tabs — these show the bottom navigation bar */}
           <Route element={<TabLayout />}>
             <Route path="/" element={<HomeScreen />} />
             <Route path="/trips" element={<TripsList />} />
-            <Route path="/grocery" element={<GroceryHome />} />
+            {/* <Route path="/grocery" element={<GroceryHome />} /> */}
           </Route>
 
           {/* Full-screen pushed screens — no tab bar, own back button */}
           <Route path="/trips/new" element={<NewTrip />} />
           <Route path="/trips/:id" element={<TripDetail />} />
-          <Route path="/grocery/:id" element={<GroceryDetail />} />
+          {/* <Route path="/grocery/:id" element={<GroceryDetail />} /> */}
 
           {/* Manage */}
           <Route path="/manage" element={<ManageHome />} />

@@ -5,7 +5,7 @@ const sections = [
   { label: 'Amenities', description: 'Beach, pool, tennis…', icon: Waves, path: '/manage/amenities' },
   { label: 'Stores', description: 'Lidl, Aldi, pharmacy…', icon: Store, path: '/manage/stores' },
   { label: 'Saved items', description: 'Autocomplete list — remove unused items', icon: Tag, path: '/manage/catalog' },
-  { label: 'Templates', description: 'Reusable checklists', icon: BookOpen, path: '/manage/templates' },
+  { label: 'Templates', description: 'Reusable checklists to add to any trip', icon: BookOpen, path: '/manage/templates' },
 ]
 
 export function ManageHome() {
@@ -25,8 +25,8 @@ export function ManageHome() {
             onClick={() => navigate(s.path)}
             className="flex items-center gap-4 bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 text-left hover:bg-gray-50"
           >
-            <div className="bg-blue-50 rounded-xl p-2.5">
-              <s.icon className="w-5 h-5 text-[#1e3a5f]" />
+            <div className="bg-emerald-50 rounded-xl p-2.5">
+              <s.icon className="w-5 h-5 text-[#2f6b4f]" />
             </div>
             <div>
               <p className="font-semibold text-gray-800">{s.label}</p>

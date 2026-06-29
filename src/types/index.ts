@@ -56,6 +56,8 @@ export interface Trip {
   status: TripStatus
   createdBy: UserIdentity
   notes?: string
+  /** Set true once usage stats have been recorded, so completion never double-counts. */
+  statsRecorded?: boolean
 }
 
 export interface Checklist {
@@ -63,7 +65,16 @@ export interface Checklist {
   tripId: string
   name: string
   phase: ChecklistPhase
+  /** Position of this checklist within its phase (0-based). */
   order: number
+}
+
+/** Global, remembered ordering applied to new trips. */
+export interface OrderingPrefs {
+  /** Order the phase sections are displayed in. */
+  phaseOrder: ChecklistPhase[]
+  /** Per-phase, the remembered order of checklist names. */
+  checklistOrder: Record<string, string[]>
 }
 
 export interface ChecklistItem {
@@ -77,11 +88,28 @@ export interface ChecklistItem {
   checked: boolean
   reminderOffsetDays?: number
   order: number
+  /** When true, the item carries over to future trips until it is checked. */
+  persist?: boolean
   rev: number
   baseRev: number
   updatedBy: UserIdentity
   updatedAt: string
   frozenField?: string
+}
+
+/**
+ * A globally-remembered item that should re-appear in future trips until it is
+ * checked. Seeded into new trips at creation (see §12). Keyed by phase +
+ * checklist name + item name so the same logical item is not duplicated.
+ */
+export interface PersistentItem {
+  id: string
+  name: string
+  phase: ChecklistPhase
+  /** Name of the checklist this item should land in (matched/created by name+phase). */
+  checklistName: string
+  catalogItemId?: string
+  qty?: string
 }
 
 export interface GroceryList {

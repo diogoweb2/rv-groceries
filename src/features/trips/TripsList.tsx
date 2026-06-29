@@ -37,10 +37,10 @@ export function TripsList() {
     : trips
 
   return (
-    <div className="flex flex-col min-h-0 flex-1">
+    <div className="flex flex-col min-h-0 flex-1 bg-[#fbf7f0]">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <h1 className="text-xl font-bold text-gray-800">Trips</h1>
+        <h1 className="text-xl font-bold text-gray-800">🏕️ Your trips</h1>
         <Button size="icon" onClick={() => navigate('/trips/new')}>
           <Plus className="w-5 h-5" />
         </Button>
@@ -52,7 +52,7 @@ export function TripsList() {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${filter === f ? 'bg-[#1e3a5f] text-white' : 'bg-gray-100 text-gray-600'}`}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${filter === f ? 'bg-[#2f6b4f] text-white' : 'bg-gray-100 text-gray-600'}`}
           >
             {f === 'upcoming' ? 'Upcoming' : 'All trips'}
           </button>
@@ -64,8 +64,8 @@ export function TripsList() {
         {visible.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400">
             <Tent className="w-14 h-14 mb-3" strokeWidth={1.2} />
-            <p className="text-base font-medium">No trips yet</p>
-            <p className="text-sm">Tap + to plan your first trip</p>
+            <p className="text-base font-medium">No adventures planned yet</p>
+            <p className="text-sm">Tap + to map out your first trip ⛺</p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
@@ -77,8 +77,8 @@ export function TripsList() {
                   onClick={() => navigate(`/trips/${trip.id}`)}
                   className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 text-left flex items-start gap-3 active:bg-gray-50 cursor-pointer"
                 >
-                  <div className="bg-blue-50 rounded-xl p-2.5 mt-0.5">
-                    <Tent className="w-5 h-5 text-[#1e3a5f]" />
+                  <div className="bg-emerald-50 rounded-xl p-2.5 mt-0.5">
+                    <Tent className="w-5 h-5 text-[#2f6b4f]" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">

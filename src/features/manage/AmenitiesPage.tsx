@@ -82,7 +82,7 @@ export function AmenitiesPage() {
                 <button
                   key={e}
                   onClick={() => setIcon(e)}
-                  className={`text-2xl p-1.5 rounded-lg border-2 ${icon === e ? 'border-[#1e3a5f]' : 'border-transparent'}`}
+                  className={`text-2xl p-1.5 rounded-lg border-2 ${icon === e ? 'border-[#2f6b4f]' : 'border-transparent'}`}
                 >
                   {e}
                 </button>

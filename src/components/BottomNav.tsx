@@ -1,11 +1,11 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Home, Tent, ShoppingCart } from 'lucide-react'
+import { Home, Tent } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
 const TABS = [
   { path: '/', icon: Home, label: 'Home', exact: true },
   { path: '/trips', icon: Tent, label: 'Camping', exact: false },
-  { path: '/grocery', icon: ShoppingCart, label: 'Supermarket', exact: false },
+  // Supermarket tab disabled for now — re-add { path: '/grocery', icon: ShoppingCart, label: 'Supermarket', exact: false } to restore.
 ]
 
 export function BottomNav() {
@@ -24,7 +24,7 @@ export function BottomNav() {
             onClick={() => navigate(tab.path)}
             className={cn(
               'flex-1 flex flex-col items-center gap-1 py-2.5 transition-colors',
-              active ? 'text-[#1e3a5f]' : 'text-gray-400'
+              active ? 'text-[#2f6b4f]' : 'text-gray-400'
             )}
           >
             <tab.icon className={cn('w-6 h-6', active && 'fill-current opacity-20')} />

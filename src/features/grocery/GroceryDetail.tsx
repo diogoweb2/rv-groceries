@@ -215,7 +215,7 @@ export function GroceryDetail() {
           <div className="flex gap-2 px-4 pb-3 overflow-x-auto">
             <button
               onClick={() => setStoreFilter('')}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1 ${!storeFilter ? 'bg-[#1e3a5f] text-white' : 'bg-gray-100 text-gray-600'}`}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1 ${!storeFilter ? 'bg-[#2f6b4f] text-white' : 'bg-gray-100 text-gray-600'}`}
             >
               <Filter className="w-3.5 h-3.5" /> All
             </button>
@@ -223,7 +223,7 @@ export function GroceryDetail() {
               <button
                 key={s.id}
                 onClick={() => setStoreFilter(s.id)}
-                className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${storeFilter === s.id ? 'bg-[#1e3a5f] text-white' : 'bg-gray-100 text-gray-600'}`}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${storeFilter === s.id ? 'bg-[#2f6b4f] text-white' : 'bg-gray-100 text-gray-600'}`}
               >
                 {s.name}
               </button>
@@ -246,7 +246,7 @@ export function GroceryDetail() {
             <button
               onClick={() => handleAddItem()}
               disabled={!addQuery.trim()}
-              className="bg-[#1e3a5f] text-white rounded-xl px-3 disabled:opacity-40"
+              className="bg-[#2f6b4f] text-white rounded-xl px-3 disabled:opacity-40"
             >
               <Plus className="w-5 h-5" />
             </button>

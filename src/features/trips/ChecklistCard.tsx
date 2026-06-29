@@ -1,21 +1,25 @@
 import { useState } from 'react'
 import { useChecklistItems } from '@/hooks/useFirestore'
-import { toggleItem, deleteItem, updateChecklist, deleteChecklist } from '@/lib/firestore'
+import { toggleItem, deleteItem, updateChecklist, deleteChecklist, copyItemToChecklist, setItemPersist, addPersistentItem, removePersistentItem } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Progress } from '@/components/ui/progress'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Plus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil } from 'lucide-react'
-import type { Checklist } from '@/types'
+import { Plus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin } from 'lucide-react'
+import type { Checklist, ChecklistItem } from '@/types'
 
 interface Props {
   checklist: Checklist
   tripId: string
   onAddItem: () => void
+  /** When set, checking an item here also copies it to this checklist (bring-to-RV). */
+  copyToOnCheck?: string
+  /** Drag handle attributes/listeners from the sortable wrapper. */
+  dragHandleProps?: React.HTMLAttributes<HTMLElement>
 }
 
-export function ChecklistCard({ checklist, tripId, onAddItem }: Props) {
+export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dragHandleProps }: Props) {
   const identity = useAppStore(s => s.identity)!
   const items = useChecklistItems(tripId, checklist.id)
   const [expanded, setExpanded] = useState(true)
@@ -26,12 +30,39 @@ export function ChecklistCard({ checklist, tripId, onAddItem }: Props) {
   const total = items.length
   const progress = total ? (checked / total) * 100 : 0
 
-  async function handleToggle(itemId: string, currentChecked: boolean, rev: number) {
-    await toggleItem(tripId, checklist.id, itemId, !currentChecked, identity, rev)
+  async function handleToggle(item: ChecklistItem) {
+    const nextChecked = !item.checked
+    await toggleItem(tripId, checklist.id, item.id, nextChecked, identity, item.rev)
+    // A persistent item only recurs while unchecked: drop it from the recurring
+    // set when checked, restore it when unchecked again.
+    if (item.persist) {
+      if (nextChecked) {
+        await removePersistentItem(checklist.phase, checklist.name, item.name)
+      } else {
+        await addPersistentItem(
+          { name: item.name, phase: checklist.phase, checklistName: checklist.name, catalogItemId: item.catalogItemId, qty: item.qty },
+          identity,
+        )
+      }
+    }
+    // When a grocery item is bought, send it to the bring-to-RV list.
+    if (nextChecked && copyToOnCheck) {
+      await copyItemToChecklist(
+        tripId,
+        copyToOnCheck,
+        { name: item.name, catalogItemId: item.catalogItemId, qty: item.qty },
+        identity,
+      )
+    }
   }
 
-  async function handleDelete(itemId: string) {
-    await deleteItem(tripId, checklist.id, itemId)
+  async function handleTogglePersist(item: ChecklistItem) {
+    await setItemPersist(tripId, checklist, item, !item.persist, identity)
+  }
+
+  async function handleDelete(item: ChecklistItem) {
+    if (item.persist) await removePersistentItem(checklist.phase, checklist.name, item.name)
+    await deleteItem(tripId, checklist.id, item.id)
   }
 
   async function handleRename() {
@@ -50,6 +81,15 @@ export function ChecklistCard({ checklist, tripId, onAddItem }: Props) {
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
       {/* Card header */}
       <div className="flex items-start gap-2 px-4 pt-4 pb-3">
+        {dragHandleProps && (
+          <button
+            {...dragHandleProps}
+            aria-label="Reorder checklist"
+            className="-ml-1.5 mt-0.5 p-1 text-gray-300 hover:text-gray-500 touch-none cursor-grab active:cursor-grabbing"
+          >
+            <GripVertical className="w-5 h-5" />
+          </button>
+        )}
         <button
           className="flex-1 min-w-0 text-left"
           onClick={() => setExpanded(v => !v)}
@@ -101,7 +141,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem }: Props) {
             >
               {/* Checkbox */}
               <button
-                onClick={() => handleToggle(item.id, item.checked, item.rev)}
+                onClick={() => handleToggle(item)}
                 className={`w-6 h-6 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${
                   item.checked
                     ? 'bg-green-500 border-green-500 text-white'
@@ -128,9 +168,19 @@ export function ChecklistCard({ checklist, tripId, onAddItem }: Props) {
                 )}
               </div>
 
+              {/* Persist (carry to future trips until checked) */}
+              <button
+                onClick={() => handleTogglePersist(item)}
+                aria-label={item.persist ? 'Stop carrying to future trips' : 'Carry to future trips'}
+                aria-pressed={!!item.persist}
+                className={`p-1 ${item.persist ? 'text-[#2f6b4f]' : 'text-gray-300 hover:text-gray-500'}`}
+              >
+                <Pin className={`w-4 h-4 ${item.persist ? 'fill-current' : ''}`} />
+              </button>
+
               {/* Delete */}
               <button
-                onClick={() => handleDelete(item.id)}
+                onClick={() => handleDelete(item)}
                 className="text-gray-300 hover:text-red-400 p-1"
               >
                 <Trash2 className="w-4 h-4" />
@@ -141,7 +191,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem }: Props) {
           {/* Add item button */}
           <button
             onClick={onAddItem}
-            className="flex items-center gap-2 w-full px-4 py-3 text-sm text-[#1e3a5f] font-medium hover:bg-blue-50 transition-colors"
+            className="flex items-center gap-2 w-full px-4 py-3 text-sm text-[#2f6b4f] font-medium hover:bg-emerald-50 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Add item

@@ -3,6 +3,7 @@ import {
   doc,
   addDoc,
   updateDoc,
+  setDoc,
   deleteDoc,
   onSnapshot,
   query,
@@ -17,8 +18,11 @@ import {
 import { db } from './firebase'
 import type {
   Trip, Checklist, ChecklistItem, Template, Amenity, Store, CatalogItem,
-  GroceryList, GroceryItem, UserIdentity
+  GroceryList, GroceryItem, UserIdentity, OrderingPrefs, ChecklistPhase,
+  PersistentItem, TripStatus
 } from '@/types'
+
+export const DEFAULT_PHASE_ORDER: ChecklistPhase[] = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,6 +45,32 @@ function clean<T extends Record<string, unknown>>(obj: T): T {
     if (v !== undefined) out[k] = v
   }
   return out as T
+}
+
+// ── Ordering preferences ────────────────────────────────────────────────────────
+// Global, remembered ordering of phase sections and of checklist names within a
+// phase. New trips inherit this so the layout stays consistent trip to trip.
+
+const ORDERING_DOC = doc(db, 'appSettings', 'ordering')
+
+export function subscribeOrdering(cb: (o: OrderingPrefs) => void) {
+  return onSnapshot(ORDERING_DOC, (snap) => {
+    const d = snap.data()
+    cb({
+      phaseOrder: (d?.phaseOrder as ChecklistPhase[]) ?? DEFAULT_PHASE_ORDER,
+      checklistOrder: (d?.checklistOrder as Record<string, string[]>) ?? {},
+    })
+  })
+}
+
+export async function savePhaseOrder(phaseOrder: ChecklistPhase[]) {
+  await setDoc(ORDERING_DOC, { phaseOrder }, { merge: true })
+}
+
+// Remember the order of checklist names within a phase (merges, leaving other
+// phases untouched).
+export async function saveChecklistOrder(phase: ChecklistPhase, names: string[]) {
+  await setDoc(ORDERING_DOC, { checklistOrder: { [phase]: names } }, { merge: true })
 }
 
 // ── Amenities ─────────────────────────────────────────────────────────────────
@@ -238,6 +268,57 @@ export async function deleteTrip(id: string) {
   await batch.commit()
 }
 
+// ── Trip status automation ─────────────────────────────────────────────────────
+// Trips advance through statuses automatically by date: a trip becomes `active`
+// the day before its start date and `completed` the day after its end date (a
+// one-day buffer on each side). `cancelled` is sticky and never auto-changed.
+// All date math is done in UTC to match the `YYYY-MM-DD` comparisons used elsewhere.
+
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+// The status a trip should have for a given day, based purely on its dates.
+export function deriveTripStatus(
+  trip: Trip,
+  today = new Date().toISOString().slice(0, 10),
+): TripStatus {
+  if (trip.status === 'cancelled') return 'cancelled'
+  if (today >= addDays(trip.endDate, 1)) return 'completed'
+  if (today >= addDays(trip.startDate, -1)) return 'active'
+  return 'planned'
+}
+
+// Forward-only progression rank; auto-sync never moves a trip backward.
+const STATUS_RANK: Record<TripStatus, number> = { planned: 0, active: 1, completed: 2, cancelled: 0 }
+
+// Mark a trip completed, recording its usage stats exactly once (the
+// `statsRecorded` guard makes repeated/auto completion safe — see §7).
+export async function completeTrip(trip: Trip, identity: UserIdentity) {
+  if (!trip.statsRecorded) {
+    await recordTripStats(trip.id, trip.amenities, identity)
+    await updateTrip(trip.id, { status: 'completed', statsRecorded: true })
+  } else {
+    await updateTrip(trip.id, { status: 'completed' })
+  }
+}
+
+// Advance any trips whose date-derived status is further along than their stored
+// one (planned → active → completed). Never moves backward and never touches
+// `cancelled`. Idempotent — safe to call on every load. Returns nothing.
+export async function syncTripStatuses(trips: Trip[], identity: UserIdentity) {
+  const today = new Date().toISOString().slice(0, 10)
+  for (const trip of trips) {
+    if (trip.status === 'cancelled') continue
+    const next = deriveTripStatus(trip, today)
+    if (next === trip.status || STATUS_RANK[next] <= STATUS_RANK[trip.status]) continue
+    if (next === 'completed') await completeTrip(trip, identity)
+    else await updateTrip(trip.id, { status: next })
+  }
+}
+
 // ── Checklists ────────────────────────────────────────────────────────────────
 
 export function subscribeChecklists(tripId: string, cb: (lists: Checklist[]) => void) {
@@ -249,6 +330,83 @@ export function subscribeChecklists(tripId: string, cb: (lists: Checklist[]) => 
 
 export async function addChecklist(tripId: string, data: Omit<Checklist, 'id' | 'tripId'>) {
   return addDoc(collection(db, 'trips', tripId, 'checklists'), { ...data, tripId })
+}
+
+// Persist the within-phase position of each checklist after a drag reorder.
+export async function saveChecklistPositions(tripId: string, ordered: { id: string }[]) {
+  const batch = writeBatch(db)
+  ordered.forEach((c, idx) =>
+    batch.update(doc(db, 'trips', tripId, 'checklists', c.id), { order: idx })
+  )
+  await batch.commit()
+}
+
+// Insert a checklist (and its items) into a trip from a saved template.
+export async function addChecklistFromTemplate(
+  tripId: string,
+  template: Template,
+  identity: UserIdentity,
+): Promise<string> {
+  // Append the new checklist at the end of its phase.
+  const existing = await getDocs(collection(db, 'trips', tripId, 'checklists'))
+  const order = existing.docs.filter((d) => d.data().phase === template.phase).length
+  const clRef = await addDoc(collection(db, 'trips', tripId, 'checklists'), {
+    tripId,
+    name: template.name,
+    phase: template.phase,
+    order,
+  })
+
+  const batch = writeBatch(db)
+  template.items.forEach((item, idx) => {
+    const ref = doc(collection(db, 'trips', tripId, 'checklists', clRef.id, 'items'))
+    batch.set(ref, clean({
+      tripId,
+      checklistId: clRef.id,
+      catalogItemId: item.catalogItemId || undefined,
+      name: item.name,
+      qty: item.qty ?? '',
+      checked: false,
+      order: idx,
+      rev: 1,
+      baseRev: 0,
+      updatedBy: identity,
+      updatedAt: new Date().toISOString(),
+      reminderOffsetDays: item.reminderOffsetDays,
+    }))
+  })
+  await batch.commit()
+  return clRef.id
+}
+
+// Copy an item into another checklist of the same trip, unless an item with the
+// same name is already there. Used to send bought groceries to the "bring to RV"
+// list automatically.
+export async function copyItemToChecklist(
+  tripId: string,
+  targetChecklistId: string,
+  item: { name: string; catalogItemId?: string; qty?: string },
+  identity: UserIdentity,
+) {
+  const col = collection(db, 'trips', tripId, 'checklists', targetChecklistId, 'items')
+  const snap = await getDocs(col)
+  const exists = snap.docs.some(
+    (d) => ((d.data().name as string) ?? '').toLowerCase() === item.name.toLowerCase()
+  )
+  if (exists) return
+  await addDoc(col, clean({
+    tripId,
+    checklistId: targetChecklistId,
+    catalogItemId: item.catalogItemId || undefined,
+    name: item.name,
+    qty: item.qty ?? '',
+    checked: false,
+    order: snap.size,
+    rev: 1,
+    baseRev: 0,
+    updatedBy: identity,
+    updatedAt: new Date().toISOString(),
+  }))
 }
 
 export async function updateChecklist(tripId: string, checklistId: string, data: Partial<Checklist>) {
@@ -331,6 +489,62 @@ export async function deleteItem(tripId: string, checklistId: string, itemId: st
   return deleteDoc(doc(db, 'trips', tripId, 'checklists', checklistId, 'items', itemId))
 }
 
+// ── Persistent (recurring) items ──────────────────────────────────────────────
+// A global set of items that should re-appear in future trips until checked.
+// Keyed deterministically by phase + checklist name + item name so the same
+// logical item is never duplicated across trips.
+
+function persistKey(phase: ChecklistPhase, checklistName: string, name: string): string {
+  return `${phase}__${checklistName.trim().toLowerCase()}__${name.trim().toLowerCase()}`
+    .replace(/[/.#$[\]]/g, '_')
+}
+
+// Mark an item as recurring (idempotent upsert). No-op-safe to call repeatedly.
+export async function addPersistentItem(
+  rec: Omit<PersistentItem, 'id'>,
+  identity: UserIdentity,
+) {
+  const key = persistKey(rec.phase, rec.checklistName, rec.name)
+  await setDoc(doc(db, 'persistentItems', key), clean({
+    name: rec.name.trim(),
+    phase: rec.phase,
+    checklistName: rec.checklistName.trim(),
+    catalogItemId: rec.catalogItemId || undefined,
+    qty: rec.qty || undefined,
+    updatedBy: identity,
+    updatedAt: new Date().toISOString(),
+  }))
+}
+
+// Stop an item from recurring (idempotent delete).
+export async function removePersistentItem(
+  phase: ChecklistPhase,
+  checklistName: string,
+  name: string,
+) {
+  await deleteDoc(doc(db, 'persistentItems', persistKey(phase, checklistName, name)))
+}
+
+// Toggle an item's persist flag and keep the global recurring set in sync.
+// An item only recurs while it is both persistent and unchecked.
+export async function setItemPersist(
+  tripId: string,
+  checklist: Checklist,
+  item: ChecklistItem,
+  persist: boolean,
+  identity: UserIdentity,
+) {
+  await updateItem(tripId, checklist.id, item.id, { persist }, identity, item.rev)
+  if (persist && !item.checked) {
+    await addPersistentItem(
+      { name: item.name, phase: checklist.phase, checklistName: checklist.name, catalogItemId: item.catalogItemId, qty: item.qty },
+      identity,
+    )
+  } else if (!persist) {
+    await removePersistentItem(checklist.phase, checklist.name, item.name)
+  }
+}
+
 // ── Create trip from templates + suggestions ───────────────────────────────────
 
 export async function createTripWithChecklists(
@@ -338,7 +552,8 @@ export async function createTripWithChecklists(
   templates: Template[],
   catalog: CatalogItem[],
   amenityIds: string[],
-  identity: UserIdentity
+  identity: UserIdentity,
+  ordering?: OrderingPrefs
 ): Promise<string> {
   const tripRef = await addDoc(collection(db, 'trips'), {
     ...tripData,
@@ -346,19 +561,36 @@ export async function createTripWithChecklists(
   })
   const tripId = tripRef.id
 
-  const phaseOrder: Record<string, number> = {
-    pre_early: 0, pre_dayof: 1, pack_down: 2, grocery: 3
+  const phaseOrder = ordering?.phaseOrder ?? DEFAULT_PHASE_ORDER
+  const checklistOrder = ordering?.checklistOrder ?? {}
+
+  // Build the checklist list grouped by the remembered phase order, and within
+  // each phase sorted by the remembered checklist-name order (unknown names go
+  // last, alphabetically). `order` is the within-phase position.
+  const relevant = templates.filter(t => t.category === 'camping')
+  const planned: { template: Template; order: number }[] = []
+  for (const phase of phaseOrder) {
+    const nameOrder = checklistOrder[phase] ?? []
+    const rank = (name: string) => {
+      const i = nameOrder.indexOf(name)
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i
+    }
+    relevant
+      .filter(t => t.phase === phase)
+      .sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name))
+      .forEach((template, idx) => planned.push({ template, order: idx }))
   }
 
-  const relevantTemplates = templates.filter(t => t.category === 'camping')
-  relevantTemplates.sort((a, b) => phaseOrder[a.phase] - phaseOrder[b.phase])
+  // Track the checklists we create so persistent items can be routed into the
+  // matching one (or a new one) afterwards.
+  const created: { id: string; name: string; phase: ChecklistPhase; itemCount: number }[] = []
 
-  for (const template of relevantTemplates) {
+  for (const { template, order } of planned) {
     const clRef = await addDoc(collection(db, 'trips', tripId, 'checklists'), {
       tripId,
       name: template.name,
       phase: template.phase,
-      order: phaseOrder[template.phase],
+      order,
     })
     const clId = clRef.id
 
@@ -382,9 +614,65 @@ export async function createTripWithChecklists(
       })
     })
     await batch.commit()
+    created.push({ id: clId, name: template.name, phase: template.phase, itemCount: suggestedItems.length })
   }
 
+  await seedPersistentItems(tripId, created, identity)
+
   return tripId
+}
+
+// Seed a freshly-created trip with the globally-remembered recurring items,
+// placing each into the checklist with a matching name+phase (creating it if
+// none exists). Skips items whose name is already present in the target.
+async function seedPersistentItems(
+  tripId: string,
+  created: { id: string; name: string; phase: ChecklistPhase; itemCount: number }[],
+  identity: UserIdentity,
+) {
+  const persistSnap = await getDocs(collection(db, 'persistentItems'))
+  if (persistSnap.empty) return
+
+  for (const p of persistSnap.docs) {
+    const rec = p.data() as Omit<PersistentItem, 'id'>
+    let target = created.find(
+      (c) => c.phase === rec.phase && c.name.toLowerCase() === rec.checklistName.trim().toLowerCase(),
+    )
+    if (!target) {
+      const order = created.filter((c) => c.phase === rec.phase).length
+      const clRef = await addDoc(collection(db, 'trips', tripId, 'checklists'), {
+        tripId,
+        name: rec.checklistName,
+        phase: rec.phase,
+        order,
+      })
+      target = { id: clRef.id, name: rec.checklistName, phase: rec.phase, itemCount: 0 }
+      created.push(target)
+    }
+
+    // Avoid duplicating an item that a template/suggestion already added.
+    const itemsCol = collection(db, 'trips', tripId, 'checklists', target.id, 'items')
+    const existing = await getDocs(itemsCol)
+    if (existing.docs.some((d) => ((d.data().name as string) ?? '').toLowerCase() === rec.name.toLowerCase())) {
+      continue
+    }
+
+    await addDoc(itemsCol, clean({
+      tripId,
+      checklistId: target.id,
+      catalogItemId: rec.catalogItemId || undefined,
+      name: rec.name,
+      qty: rec.qty ?? '',
+      checked: false,
+      persist: true,
+      order: existing.size,
+      rev: 1,
+      baseRev: 0,
+      updatedBy: identity,
+      updatedAt: new Date().toISOString(),
+    }))
+    target.itemCount = existing.size + 1
+  }
 }
 
 function suggestItemsForTrip(

@@ -113,7 +113,7 @@ export function AddItemSheet({ tripId, checklistId, onClose }: Props) {
             disabled={saving}
             className="flex items-center gap-3 px-4 py-3.5 border-b border-gray-50 hover:bg-gray-50"
           >
-            <div className="w-8 h-8 rounded-full bg-[#1e3a5f] flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-full bg-[#2f6b4f] flex items-center justify-center shrink-0">
               <Plus className="w-4 h-4 text-white" />
             </div>
             <span className="text-base text-gray-800">Add "<strong>{query.trim()}</strong>"</span>

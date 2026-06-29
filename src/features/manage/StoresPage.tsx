@@ -50,7 +50,7 @@ export function StoresPage() {
       <div className="flex-1 overflow-y-auto flex flex-col gap-2 p-4">
         {stores.map(s => (
           <div key={s.id} className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3.5">
-            <Store className="w-5 h-5 text-[#1e3a5f]" />
+            <Store className="w-5 h-5 text-[#2f6b4f]" />
             <span className="flex-1 font-medium text-gray-800">{s.name}</span>
             <button onClick={() => openEdit(s)} className="text-gray-400 hover:text-gray-600 p-1">
               <Pencil className="w-4 h-4" />

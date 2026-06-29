@@ -59,12 +59,17 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (step === 'done') return <>{children}</>
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-dvh bg-[#1e3a5f] px-6">
-      <div className="w-full max-w-sm">
+    <div className="camp-sky flex flex-col items-center justify-center min-h-dvh px-6 relative overflow-hidden">
+      {/* Decorative sun + hills */}
+      <div className="absolute right-10 top-14 w-20 h-20 rounded-full bg-amber-100/90 blur-[1px]" aria-hidden />
+      <div className="camp-hills absolute inset-x-0 bottom-0 h-40" aria-hidden />
+      <div className="w-full max-w-sm relative z-10">
         <div className="flex flex-col items-center mb-8">
-          <Tent className="w-16 h-16 text-white mb-2" strokeWidth={1.5} />
-          <h1 className="text-3xl font-bold text-white">RV & Groceries</h1>
-          <p className="text-blue-200 text-sm mt-1">Camping checklists for Diogo & Alice</p>
+          <div className="bg-white/15 backdrop-blur-sm rounded-3xl p-4 mb-3">
+            <Tent className="w-14 h-14 text-white" strokeWidth={1.5} />
+          </div>
+          <h1 className="text-3xl font-bold text-white drop-shadow-sm">RV & Groceries</h1>
+          <p className="text-emerald-50/90 text-sm mt-1">🏕️ Camping checklists for Diogo & Alice</p>
         </div>
 
         {step === 'pin' && (
@@ -76,13 +81,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               onChange={(e) => { setPin(e.target.value); setError('') }}
               placeholder="Password"
               autoComplete="current-password"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] mb-3"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-[#2f6b4f] mb-3"
             />
             {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
             <button
               type="submit"
               disabled={loading || !pin}
-              className="w-full bg-[#1e3a5f] text-white py-3 rounded-xl font-semibold text-base disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full bg-[#2f6b4f] text-white py-3 rounded-xl font-semibold text-base disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               Continue
@@ -97,7 +102,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             <div className="flex flex-col gap-3">
               <button
                 onClick={() => pickIdentity('diogo')}
-                className="flex items-center gap-3 border-2 border-[#1e3a5f] rounded-xl px-5 py-4 text-[#1e3a5f] font-semibold text-base hover:bg-blue-50 transition-colors"
+                className="flex items-center gap-3 border-2 border-[#2f6b4f] rounded-xl px-5 py-4 text-[#2f6b4f] font-semibold text-base hover:bg-emerald-50 transition-colors"
               >
                 <Tent className="w-5 h-5" />
                 I'm Diogo

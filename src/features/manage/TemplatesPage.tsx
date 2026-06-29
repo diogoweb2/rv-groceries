@@ -136,7 +136,7 @@ export function TemplatesPage() {
                   <button
                     key={p.value}
                     onClick={() => updateField('phase', p.value)}
-                    className={`py-2.5 px-3 rounded-xl text-sm font-medium border-2 transition-colors ${editing.phase === p.value ? 'border-[#1e3a5f] bg-[#1e3a5f] text-white' : 'border-gray-200 text-gray-600'}`}
+                    className={`py-2.5 px-3 rounded-xl text-sm font-medium border-2 transition-colors ${editing.phase === p.value ? 'border-[#2f6b4f] bg-[#2f6b4f] text-white' : 'border-gray-200 text-gray-600'}`}
                   >
                     {p.label}
                   </button>
@@ -175,7 +175,7 @@ export function TemplatesPage() {
                     {suggestions.length === 0 && (
                       <button
                         onClick={() => addTemplateItem('', itemQuery.trim())}
-                        className="flex items-center gap-2 w-full px-4 py-3 text-sm text-[#1e3a5f]"
+                        className="flex items-center gap-2 w-full px-4 py-3 text-sm text-[#2f6b4f]"
                       >
                         <Plus className="w-4 h-4" /> Add "{itemQuery}"
                       </button>

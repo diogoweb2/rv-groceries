@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAmenities, useTemplates, useCatalog } from '@/hooks/useFirestore'
+import { useAmenities, useTemplates, useCatalog, useOrdering } from '@/hooks/useFirestore'
 import { createTripWithChecklists } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ export function NewTrip() {
   const amenities = useAmenities()
   const templates = useTemplates()
   const catalog = useCatalog()
+  const ordering = useOrdering()
   const identity = useAppStore(s => s.identity)!
 
   const [title, setTitle] = useState('')
@@ -45,7 +46,8 @@ export function NewTrip() {
         templates,
         catalog,
         selectedAmenities,
-        identity
+        identity,
+        ordering
       )
       navigate(`/trips/${tripId}`, { replace: true })
     } catch (err) {
@@ -108,7 +110,7 @@ export function NewTrip() {
                     onClick={() => toggleAmenity(a.id)}
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border-2 transition-colors ${
                       active
-                        ? 'border-[#1e3a5f] bg-[#1e3a5f] text-white'
+                        ? 'border-[#2f6b4f] bg-[#2f6b4f] text-white'
                         : 'border-gray-200 bg-white text-gray-700'
                     }`}
                   >
@@ -124,8 +126,8 @@ export function NewTrip() {
 
         {/* Templates preview */}
         {templates.filter(t => t.category === 'camping').length > 0 && (
-          <div className="bg-blue-50 rounded-xl p-4">
-            <p className="text-sm font-medium text-[#1e3a5f] mb-1">Checklists that will be created:</p>
+          <div className="bg-emerald-50 rounded-xl p-4">
+            <p className="text-sm font-medium text-[#2f6b4f] mb-1">Checklists that will be created:</p>
             <ul className="text-sm text-blue-700 flex flex-col gap-0.5">
               {templates
                 .filter(t => t.category === 'camping')

@@ -125,7 +125,7 @@ export function CatalogPage() {
                 <button
                   key={c.value}
                   onClick={() => setCategory(c.value)}
-                  className={`flex-1 py-2 rounded-xl text-sm font-medium border-2 transition-colors ${category === c.value ? 'border-[#1e3a5f] bg-[#1e3a5f] text-white' : 'border-gray-200 text-gray-600'}`}
+                  className={`flex-1 py-2 rounded-xl text-sm font-medium border-2 transition-colors ${category === c.value ? 'border-[#2f6b4f] bg-[#2f6b4f] text-white' : 'border-gray-200 text-gray-600'}`}
                 >
                   {c.label}
                 </button>
@@ -137,7 +137,7 @@ export function CatalogPage() {
             <select
               value={storeId}
               onChange={e => setStoreId(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-base bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-base bg-white focus:outline-none focus:ring-2 focus:ring-[#2f6b4f]"
             >
               <option value="">None</option>
               {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
