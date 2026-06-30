@@ -67,6 +67,24 @@ export interface Checklist {
   phase: ChecklistPhase
   /** Position of this checklist within its phase (0-based). */
   order: number
+  /** When true, this checklist is pinned and auto-creates on every new trip. */
+  pinned?: boolean
+}
+
+export interface PinnedChecklistItem {
+  name: string
+  catalogItemId?: string
+  qty?: string
+}
+
+/** A globally-stored snapshot of a pinned checklist, seeded into new trips at creation. */
+export interface PinnedChecklist {
+  id: string
+  name: string
+  phase: ChecklistPhase
+  items: PinnedChecklistItem[]
+  updatedAt: string
+  updatedBy: UserIdentity
 }
 
 /** Global, remembered ordering applied to new trips. */

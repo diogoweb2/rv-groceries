@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAmenities, useTemplates, useCatalog, useOrdering } from '@/hooks/useFirestore'
+import { useAmenities, usePinnedChecklists, useOrdering } from '@/hooks/useFirestore'
 import { createTripWithChecklists } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -10,8 +10,7 @@ import { ArrowLeft, Loader2, Check } from 'lucide-react'
 export function NewTrip() {
   const navigate = useNavigate()
   const amenities = useAmenities()
-  const templates = useTemplates()
-  const catalog = useCatalog()
+  const pinnedChecklists = usePinnedChecklists()
   const ordering = useOrdering()
   const identity = useAppStore(s => s.identity)!
 
@@ -43,9 +42,7 @@ export function NewTrip() {
           status: 'planned',
           createdBy: identity,
         },
-        templates,
-        catalog,
-        selectedAmenities,
+        pinnedChecklists,
         identity,
         ordering
       )
@@ -124,17 +121,14 @@ export function NewTrip() {
           )}
         </div>
 
-        {/* Templates preview */}
-        {templates.filter(t => t.category === 'camping').length > 0 && (
+        {/* Pinned checklists preview */}
+        {pinnedChecklists.length > 0 && (
           <div className="bg-emerald-50 rounded-xl p-4">
             <p className="text-sm font-medium text-[#2f6b4f] mb-1">Checklists that will be created:</p>
-            <ul className="text-sm text-blue-700 flex flex-col gap-0.5">
-              {templates
-                .filter(t => t.category === 'camping')
-                .map(t => (
-                  <li key={t.id}>• {t.name} ({t.items.length} items)</li>
-                ))
-              }
+            <ul className="text-sm text-[#2f6b4f] flex flex-col gap-0.5">
+              {pinnedChecklists.map(p => (
+                <li key={p.id}>• {p.name} ({p.items.length} items)</li>
+              ))}
             </ul>
           </div>
         )}

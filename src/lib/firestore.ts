@@ -17,9 +17,9 @@ import {
 } from 'firebase/firestore'
 import { db } from './firebase'
 import type {
-  Trip, Checklist, ChecklistItem, Template, Amenity, Store, CatalogItem,
+  Trip, Checklist, ChecklistItem, Amenity, Store, CatalogItem,
   GroceryList, GroceryItem, UserIdentity, OrderingPrefs, ChecklistPhase,
-  PersistentItem, TripStatus
+  PersistentItem, TripStatus, PinnedChecklist
 } from '@/types'
 
 export const DEFAULT_PHASE_ORDER: ChecklistPhase[] = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
@@ -218,24 +218,38 @@ export async function backfillCatalogFromItems(): Promise<number> {
   return toAdd.size
 }
 
-// ── Templates ─────────────────────────────────────────────────────────────────
+// ── Pinned Checklists ─────────────────────────────────────────────────────────
+// A globally-stored snapshot of each pinned checklist, seeded into new trips.
+// Keyed deterministically by phase + name.
 
-export function subscribeTemplates(cb: (items: Template[]) => void) {
-  return onSnapshot(query(collection(db, 'templates'), orderBy('name')), (snap) =>
-    cb(snap.docs.map((d) => docData<Template>(d)))
+function pinnedChecklistKey(name: string, phase: ChecklistPhase): string {
+  return `${phase}__${name.trim().toLowerCase()}`.replace(/[/.#$[\]]/g, '_')
+}
+
+export function subscribePinnedChecklists(cb: (items: PinnedChecklist[]) => void) {
+  return onSnapshot(collection(db, 'pinnedChecklists'), (snap) =>
+    cb(snap.docs.map((d) => docData<PinnedChecklist>(d)))
   )
 }
 
-export async function addTemplate(data: Omit<Template, 'id'>) {
-  return addDoc(collection(db, 'templates'), data)
+export async function savePinnedChecklist(
+  name: string,
+  phase: ChecklistPhase,
+  items: ChecklistItem[],
+  identity: UserIdentity,
+) {
+  const key = pinnedChecklistKey(name, phase)
+  await setDoc(doc(db, 'pinnedChecklists', key), {
+    name: name.trim(),
+    phase,
+    items: items.map(i => clean({ name: i.name, catalogItemId: i.catalogItemId || undefined, qty: i.qty || undefined })),
+    updatedAt: new Date().toISOString(),
+    updatedBy: identity,
+  })
 }
 
-export async function updateTemplate(id: string, data: Partial<Template>) {
-  return updateDoc(doc(db, 'templates', id), data)
-}
-
-export async function deleteTemplate(id: string) {
-  return deleteDoc(doc(db, 'templates', id))
+export async function removePinnedChecklist(phase: ChecklistPhase, name: string) {
+  await deleteDoc(doc(db, 'pinnedChecklists', pinnedChecklistKey(name, phase)))
 }
 
 // ── Trips ─────────────────────────────────────────────────────────────────────
@@ -339,44 +353,6 @@ export async function saveChecklistPositions(tripId: string, ordered: { id: stri
     batch.update(doc(db, 'trips', tripId, 'checklists', c.id), { order: idx })
   )
   await batch.commit()
-}
-
-// Insert a checklist (and its items) into a trip from a saved template.
-export async function addChecklistFromTemplate(
-  tripId: string,
-  template: Template,
-  identity: UserIdentity,
-): Promise<string> {
-  // Append the new checklist at the end of its phase.
-  const existing = await getDocs(collection(db, 'trips', tripId, 'checklists'))
-  const order = existing.docs.filter((d) => d.data().phase === template.phase).length
-  const clRef = await addDoc(collection(db, 'trips', tripId, 'checklists'), {
-    tripId,
-    name: template.name,
-    phase: template.phase,
-    order,
-  })
-
-  const batch = writeBatch(db)
-  template.items.forEach((item, idx) => {
-    const ref = doc(collection(db, 'trips', tripId, 'checklists', clRef.id, 'items'))
-    batch.set(ref, clean({
-      tripId,
-      checklistId: clRef.id,
-      catalogItemId: item.catalogItemId || undefined,
-      name: item.name,
-      qty: item.qty ?? '',
-      checked: false,
-      order: idx,
-      rev: 1,
-      baseRev: 0,
-      updatedBy: identity,
-      updatedAt: new Date().toISOString(),
-      reminderOffsetDays: item.reminderOffsetDays,
-    }))
-  })
-  await batch.commit()
-  return clRef.id
 }
 
 // Copy an item into another checklist of the same trip, unless an item with the
@@ -545,13 +521,11 @@ export async function setItemPersist(
   }
 }
 
-// ── Create trip from templates + suggestions ───────────────────────────────────
+// ── Create trip from pinned checklists ─────────────────────────────────────────
 
 export async function createTripWithChecklists(
   tripData: Omit<Trip, 'id'>,
-  templates: Template[],
-  catalog: CatalogItem[],
-  amenityIds: string[],
+  pinnedChecklists: PinnedChecklist[],
   identity: UserIdentity,
   ordering?: OrderingPrefs
 ): Promise<string> {
@@ -564,61 +538,54 @@ export async function createTripWithChecklists(
   const phaseOrder = ordering?.phaseOrder ?? DEFAULT_PHASE_ORDER
   const checklistOrder = ordering?.checklistOrder ?? {}
 
-  // Build the checklist list grouped by the remembered phase order, and within
-  // each phase sorted by the remembered checklist-name order (unknown names go
-  // last, alphabetically). `order` is the within-phase position.
-  const relevant = templates.filter(t => t.category === 'camping')
-  const planned: { template: Template; order: number }[] = []
+  // Sort pinned checklists by the remembered phase + name order.
+  const planned: { pinned: PinnedChecklist; order: number }[] = []
   for (const phase of phaseOrder) {
     const nameOrder = checklistOrder[phase] ?? []
     const rank = (name: string) => {
       const i = nameOrder.indexOf(name)
       return i === -1 ? Number.MAX_SAFE_INTEGER : i
     }
-    relevant
-      .filter(t => t.phase === phase)
+    pinnedChecklists
+      .filter(p => p.phase === phase)
       .sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name))
-      .forEach((template, idx) => planned.push({ template, order: idx }))
+      .forEach((pinned, idx) => planned.push({ pinned, order: idx }))
   }
 
-  // Track the checklists we create so persistent items can be routed into the
-  // matching one (or a new one) afterwards.
   const created: { id: string; name: string; phase: ChecklistPhase; itemCount: number }[] = []
 
-  for (const { template, order } of planned) {
+  for (const { pinned, order } of planned) {
     const clRef = await addDoc(collection(db, 'trips', tripId, 'checklists'), {
       tripId,
-      name: template.name,
-      phase: template.phase,
+      name: pinned.name,
+      phase: pinned.phase,
       order,
+      pinned: true,
     })
     const clId = clRef.id
 
-    const suggestedItems = suggestItemsForTrip(catalog, amenityIds, template)
-
     const batch = writeBatch(db)
-    suggestedItems.forEach((item, idx) => {
+    pinned.items.forEach((item, idx) => {
       const itemRef = doc(collection(db, 'trips', tripId, 'checklists', clId, 'items'))
-      batch.set(itemRef, {
+      batch.set(itemRef, clean({
         tripId,
         checklistId: clId,
-        catalogItemId: item.id,
+        catalogItemId: item.catalogItemId || undefined,
         name: item.name,
-        qty: '',
+        qty: item.qty ?? '',
         checked: false,
         order: idx,
         rev: 1,
         baseRev: 0,
         updatedBy: identity,
         updatedAt: new Date().toISOString(),
-      })
+      }))
     })
     await batch.commit()
-    created.push({ id: clId, name: template.name, phase: template.phase, itemCount: suggestedItems.length })
+    created.push({ id: clId, name: pinned.name, phase: pinned.phase, itemCount: pinned.items.length })
   }
 
   await seedPersistentItems(tripId, created, identity)
-
   return tripId
 }
 
@@ -673,40 +640,6 @@ async function seedPersistentItems(
     }))
     target.itemCount = existing.size + 1
   }
-}
-
-function suggestItemsForTrip(
-  catalog: CatalogItem[],
-  amenityIds: string[],
-  template: Template
-): CatalogItem[] {
-  const templateItemIds = new Set(template.items.map(i => i.catalogItemId))
-  const result: CatalogItem[] = []
-
-  for (const templateItem of template.items) {
-    const catalogItem = catalog.find(c => c.id === templateItem.catalogItemId)
-    if (catalogItem) result.push(catalogItem)
-  }
-
-  for (const item of catalog) {
-    if (templateItemIds.has(item.id)) continue
-    if (item.category !== 'camping') continue
-    const score = computeAmenityScore(item, amenityIds)
-    if (score >= 0.6) result.push(item)
-  }
-
-  return result
-}
-
-function computeAmenityScore(item: CatalogItem, amenityIds: string[]): number {
-  if (!amenityIds.length || !item.stats) return 0
-  let totalScore = 0
-  for (const amenityId of amenityIds) {
-    const count = item.stats.byAmenity?.[amenityId] ?? 0
-    const total = item.stats.totalUsed ?? 0
-    if (total > 0) totalScore += count / total
-  }
-  return totalScore / amenityIds.length
 }
 
 // ── Grocery Lists ─────────────────────────────────────────────────────────────

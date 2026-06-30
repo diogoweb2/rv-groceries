@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useTrips, useChecklists, useTemplates, useAmenities, useOrdering } from '@/hooks/useFirestore'
-import { updateTrip, deleteTrip, completeTrip, addChecklist, addChecklistFromTemplate, savePhaseOrder, saveChecklistOrder, saveChecklistPositions } from '@/lib/firestore'
+import { useTrips, useChecklists, useAmenities, useOrdering } from '@/hooks/useFirestore'
+import { updateTrip, deleteTrip, completeTrip, addChecklist, savePhaseOrder, saveChecklistOrder, saveChecklistPositions } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { ChecklistCard } from './ChecklistCard'
 import { AddItemSheet } from './AddItemSheet'
@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog } from '@/components/ui/dialog'
-import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, Plus, BookOpen, Check, Tag, GripVertical } from 'lucide-react'
+import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, Plus, Check, Tag, GripVertical } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -104,7 +104,6 @@ export function TripDetail() {
   const navigate = useNavigate()
   const trips = useTrips()
   const checklists = useChecklists(id)
-  const templates = useTemplates()
   const amenities = useAmenities()
   const ordering = useOrdering()
   const identity = useAppStore(s => s.identity)!
@@ -115,12 +114,10 @@ export function TripDetail() {
   )
   const [menuOpen, setMenuOpen] = useState(false)
   const [addingTo, setAddingTo] = useState<string | null>(null)
-  const [pickerOpen, setPickerOpen] = useState(false)
   const [newChecklist, setNewChecklist] = useState<{ name: string; phase: ChecklistPhase } | null>(null)
   const [savingChecklist, setSavingChecklist] = useState(false)
   const [editAmenities, setEditAmenities] = useState<string[] | null>(null)
 
-  const campingTemplates = templates.filter(t => t.category === 'camping')
   // Bought groceries get copied into the "Day of departure" checklist (bring to RV).
   const bringToRvId = checklists.find(c => c.phase === 'pre_dayof')?.id
 
@@ -185,13 +182,6 @@ export function TripDetail() {
       saveChecklistPositions(id!, next)        // persist positions on this trip
       saveChecklistOrder(phase, next.map(c => c.name)) // remember for future trips
     }
-  }
-
-  async function handleAddTemplate(templateId: string) {
-    const template = templates.find(t => t.id === templateId)
-    if (!template) return
-    setPickerOpen(false)
-    await addChecklistFromTemplate(id!, template, identity)
   }
 
   async function handleSaveAmenities() {
@@ -327,7 +317,7 @@ export function TripDetail() {
 
         {/* Add checklist */}
         <button
-          onClick={() => setPickerOpen(true)}
+          onClick={() => setNewChecklist({ name: '', phase: 'pre_early' })}
           className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl border-2 border-dashed border-gray-200 text-[#2f6b4f] font-medium hover:bg-emerald-50 transition-colors"
         >
           <Plus className="w-5 h-5" />
@@ -378,51 +368,6 @@ export function TripDetail() {
             </div>
           </div>
         )}
-      </Dialog>
-
-      {/* Add checklist picker */}
-      <Dialog open={pickerOpen} onClose={() => setPickerOpen(false)} title="Add checklist">
-        <div className="flex flex-col gap-3">
-          {campingTemplates.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Saved checklists</p>
-              <div className="flex flex-col gap-2">
-                {campingTemplates.map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => handleAddTemplate(t.id)}
-                    className="flex items-center gap-3 w-full text-left rounded-xl border border-gray-200 px-4 py-3 hover:bg-gray-50"
-                  >
-                    <div className="bg-emerald-50 rounded-lg p-2">
-                      <BookOpen className="w-4 h-4 text-[#2f6b4f]" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-800 truncate">{t.name}</p>
-                      <p className="text-xs text-gray-500">{PHASE_LABELS[t.phase] ?? t.phase} · {t.items.length} items</p>
-                    </div>
-                    <Plus className="w-4 h-4 text-gray-400 shrink-0" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <button
-            onClick={() => { setPickerOpen(false); setNewChecklist({ name: '', phase: 'pre_early' }) }}
-            className="flex items-center gap-3 w-full text-left rounded-xl border-2 border-dashed border-gray-200 px-4 py-3 text-[#2f6b4f] hover:bg-emerald-50"
-          >
-            <div className="bg-emerald-50 rounded-lg p-2">
-              <Plus className="w-4 h-4 text-[#2f6b4f]" />
-            </div>
-            <span className="font-medium">Blank checklist</span>
-          </button>
-
-          {campingTemplates.length === 0 && (
-            <p className="text-xs text-gray-400 text-center pt-1">
-              Tip: create reusable checklists in Manage → Templates to add them here in one tap.
-            </p>
-          )}
-        </div>
       </Dialog>
 
       {/* New checklist dialog */}

@@ -16,7 +16,6 @@ import { ManageHome } from '@/features/manage/ManageHome'
 import { AmenitiesPage } from '@/features/manage/AmenitiesPage'
 import { StoresPage } from '@/features/manage/StoresPage'
 import { CatalogPage } from '@/features/manage/CatalogPage'
-import { TemplatesPage } from '@/features/manage/TemplatesPage'
 
 // Keeps the global catalog clean and complete, once per device: removes any
 // duplicate-name entries, then seeds names from items already in lists.
@@ -75,8 +74,6 @@ export default function App() {
           <Route path="/manage/amenities" element={<AmenitiesPage />} />
           <Route path="/manage/stores" element={<StoresPage />} />
           <Route path="/manage/catalog" element={<CatalogPage />} />
-          <Route path="/manage/templates" element={<TemplatesPage />} />
-
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

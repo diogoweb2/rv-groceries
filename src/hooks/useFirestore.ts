@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
 import {
   subscribeAmenities, subscribeStores, subscribeCatalog,
-  subscribeTemplates, subscribeTrips, subscribeChecklists,
+  subscribePinnedChecklists, subscribeTrips, subscribeChecklists,
   subscribeItems, subscribeGroceryLists, subscribeGroceryItems,
   subscribeOrdering, DEFAULT_PHASE_ORDER,
 } from '@/lib/firestore'
 import type {
-  Amenity, Store, CatalogItem, Template, Trip,
+  Amenity, Store, CatalogItem, PinnedChecklist, Trip,
   Checklist, ChecklistItem, GroceryList, GroceryItem, OrderingPrefs,
 } from '@/types'
 
@@ -28,9 +28,9 @@ export function useCatalog() {
   return data
 }
 
-export function useTemplates() {
-  const [data, setData] = useState<Template[]>([])
-  useEffect(() => subscribeTemplates(setData), [])
+export function usePinnedChecklists() {
+  const [data, setData] = useState<PinnedChecklist[]>([])
+  useEffect(() => subscribePinnedChecklists(setData), [])
   return data
 }
 

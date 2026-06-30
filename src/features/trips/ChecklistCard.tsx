@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useChecklistItems } from '@/hooks/useFirestore'
-import { toggleItem, deleteItem, updateChecklist, deleteChecklist, copyItemToChecklist, setItemPersist, addPersistentItem, removePersistentItem } from '@/lib/firestore'
+import { toggleItem, deleteItem, updateChecklist, deleteChecklist, copyItemToChecklist, setItemPersist, addPersistentItem, removePersistentItem, savePinnedChecklist, removePinnedChecklist } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Progress } from '@/components/ui/progress'
 import { Dialog } from '@/components/ui/dialog'
@@ -29,6 +29,19 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
   const checked = items.filter(i => i.checked).length
   const total = items.length
   const progress = total ? (checked / total) * 100 : 0
+
+  // When this checklist is pinned, keep the global snapshot in sync with any
+  // item changes (add, delete, toggle). Skip the first render where items is
+  // still the initial empty array before Firestore data loads.
+  const hasMounted = useRef(false)
+  useEffect(() => {
+    if (!checklist.pinned) return
+    if (!hasMounted.current) {
+      hasMounted.current = true
+      return
+    }
+    savePinnedChecklist(checklist.name, checklist.phase, items, identity)
+  }, [items, checklist.pinned, checklist.name, checklist.phase, identity])
 
   async function handleToggle(item: ChecklistItem) {
     const nextChecked = !item.checked
@@ -65,15 +78,34 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
     await deleteItem(tripId, checklist.id, item.id)
   }
 
+  async function handleTogglePin() {
+    setMenuOpen(false)
+    if (checklist.pinned) {
+      await updateChecklist(tripId, checklist.id, { pinned: false })
+      await removePinnedChecklist(checklist.phase, checklist.name)
+    } else {
+      await updateChecklist(tripId, checklist.id, { pinned: true })
+      await savePinnedChecklist(checklist.name, checklist.phase, items, identity)
+    }
+  }
+
   async function handleRename() {
     if (renaming === null || !renaming.trim()) return
-    await updateChecklist(tripId, checklist.id, { name: renaming.trim() })
+    const newName = renaming.trim()
+    if (checklist.pinned) {
+      await removePinnedChecklist(checklist.phase, checklist.name)
+      await savePinnedChecklist(newName, checklist.phase, items, identity)
+    }
+    await updateChecklist(tripId, checklist.id, { name: newName })
     setRenaming(null)
   }
 
   async function handleDeleteChecklist() {
     setMenuOpen(false)
     if (!confirm(`Delete checklist "${checklist.name}" and all its items?`)) return
+    if (checklist.pinned) {
+      await removePinnedChecklist(checklist.phase, checklist.name)
+    }
     await deleteChecklist(tripId, checklist.id)
   }
 
@@ -96,6 +128,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
         >
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <span className="font-semibold text-gray-800 truncate">{checklist.name}</span>
+              {checklist.pinned && <Pin className="w-3.5 h-3.5 text-[#2f6b4f] fill-current shrink-0" />}
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-sm text-gray-500">{checked}/{total}</span>
               {expanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
@@ -113,6 +146,13 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
               <div className="absolute right-0 top-full z-20 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-36">
+                <button
+                  onClick={handleTogglePin}
+                  className={`flex items-center gap-2 w-full px-4 py-2.5 text-sm hover:bg-gray-50 ${checklist.pinned ? 'text-[#2f6b4f]' : 'text-gray-700'}`}
+                >
+                  <Pin className={`w-4 h-4 ${checklist.pinned ? 'fill-current' : ''}`} />
+                  {checklist.pinned ? 'Unpin from future trips' : 'Pin to future trips'}
+                </button>
                 <button
                   onClick={() => { setMenuOpen(false); setRenaming(checklist.name) }}
                   className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
