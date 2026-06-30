@@ -39,4 +39,21 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: 'vendor-firebase-firestore', test: /node_modules\/(@firebase\/firestore|firebase\/firestore)\//, maxSize: 400_000 },
+            { name: 'vendor-firebase-auth', test: /node_modules\/(@firebase\/auth|firebase\/auth)\// },
+            { name: 'vendor-firebase', test: /node_modules\/(@firebase|firebase)\// },
+            { name: 'vendor-radix', test: /node_modules\/@radix-ui\// },
+            { name: 'vendor-dnd-kit', test: /node_modules\/@dnd-kit\// },
+            { name: 'vendor-react', test: /node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\// },
+            { name: 'vendor', test: /node_modules\// },
+          ],
+        },
+      },
+    },
+  },
 })

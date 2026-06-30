@@ -6,7 +6,6 @@ import {
   persistentMultipleTabManager,
 } from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'
-import { getMessaging, isSupported } from 'firebase/messaging'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -30,6 +29,7 @@ export const db = getFirestore(app)
 export const auth = getAuth(app)
 
 export async function getMessagingInstance() {
+  const { getMessaging, isSupported } = await import('firebase/messaging')
   const supported = await isSupported()
   if (!supported) return null
   return getMessaging(app)

@@ -178,6 +178,13 @@ The `itemCatalog` collection is the **single global source** for item autocomple
 - **Offline-first.** Firestore persistent local cache is enabled (multi-tab), so reads/writes
   work offline and sync when back online. Direct Firestore network calls are not cached by the
   service worker (network-only) to avoid stale data.
+- **Auto-update.** Users always receive the latest deployed version without manually clearing
+  their cache. The service worker uses `autoUpdate`; the app entry points (`index.html`, `sw.js`,
+  `registerSW.js`, `manifest.webmanifest`) are served `no-cache` so the browser revalidates them
+  on every visit, while content-hashed `/assets/**` bundles are cached `immutable`. The new
+  version applies on the next app open, and any already-open tab auto-reloads itself the moment
+  the new service worker takes control (skipping the first install and guarding against reload
+  loops).
 
 ## 11. Reference Data (Manage)
 

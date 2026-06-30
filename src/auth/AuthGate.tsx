@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { signInWithEmailAndPassword } from 'firebase/auth'
-import { getToken } from 'firebase/messaging'
 import { auth, getMessagingInstance } from '@/lib/firebase'
 import { useAppStore } from '@/lib/store'
 import type { UserIdentity } from '@/types'
@@ -49,6 +48,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       if (!messaging) return
       const permission = await Notification.requestPermission()
       if (permission !== 'granted') return
+      const { getToken } = await import('firebase/messaging')
       const token = await getToken(messaging, { vapidKey: VAPID_KEY })
       if (token) setFcmToken(token)
     } catch {
