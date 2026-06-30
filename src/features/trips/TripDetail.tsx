@@ -238,7 +238,7 @@ export function TripDetail() {
   }
 
   function openInMaps() {
-    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trip.title)}`, '_blank', 'noopener,noreferrer')
+    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(currentTrip.title)}`, '_blank', 'noopener,noreferrer')
   }
 
   async function handleRatingSubmit() {
@@ -248,7 +248,7 @@ export function TripDetail() {
   }
 
   function openRatingDialog() {
-    setPendingRating(trip.ratings?.[identity] ?? 0)
+    setPendingRating(currentTrip.ratings?.[identity] ?? 0)
     setRatingOpen(true)
   }
 
