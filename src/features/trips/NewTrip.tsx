@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAmenities, usePinnedChecklists, useOrdering } from '@/hooks/useFirestore'
+import { useAmenities, usePinnedChecklists, useOrdering, useTrips } from '@/hooks/useFirestore'
 import { createTripWithChecklists } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ export function NewTrip() {
   const amenities = useAmenities()
   const pinnedChecklists = usePinnedChecklists()
   const ordering = useOrdering()
+  const trips = useTrips()
   const identity = useAppStore(s => s.identity)!
 
   const [title, setTitle] = useState('')
@@ -20,6 +21,30 @@ export function NewTrip() {
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showSuggestions, setShowSuggestions] = useState(false)
+
+  // Unique past trip titles, ordered most-recent first.
+  const pastTitles = useMemo(() => {
+    const seen = new Set<string>()
+    return [...trips]
+      .sort((a, b) => b.startDate.localeCompare(a.startDate))
+      .map(t => t.title)
+      .filter(t => { if (seen.has(t)) return false; seen.add(t); return true })
+  }, [trips])
+
+  const suggestions = title.trim()
+    ? pastTitles.filter(t => t.toLowerCase().includes(title.toLowerCase()) && t !== title)
+    : []
+
+  function selectSuggestion(name: string) {
+    setTitle(name)
+    setShowSuggestions(false)
+    // Pre-fill amenities from the most recent trip with this title.
+    const match = [...trips]
+      .sort((a, b) => b.startDate.localeCompare(a.startDate))
+      .find(t => t.title === name)
+    if (match) setSelectedAmenities(match.amenities)
+  }
 
   function toggleAmenity(id: string) {
     setSelectedAmenities(prev =>
@@ -67,14 +92,32 @@ export function NewTrip() {
 
       <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
         {/* Title */}
-        <div>
+        <div className="relative">
           <label className="text-sm font-medium text-gray-700 mb-1.5 block">Trip name *</label>
           <Input
             value={title}
-            onChange={e => setTitle(e.target.value)}
+            onChange={e => { setTitle(e.target.value); setShowSuggestions(true) }}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
             placeholder="e.g. Costa Vicentina June"
             autoFocus
+            autoComplete="off"
           />
+          {showSuggestions && suggestions.length > 0 && (
+            <ul className="absolute z-30 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+              {suggestions.map(s => (
+                <li key={s}>
+                  <button
+                    type="button"
+                    onMouseDown={() => selectSuggestion(s)}
+                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    {s}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {/* Dates */}

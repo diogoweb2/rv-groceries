@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTrips, useChecklists, useAmenities, useOrdering } from '@/hooks/useFirestore'
-import { updateTrip, deleteTrip, completeTrip, addChecklist, savePhaseOrder, saveChecklistOrder, saveChecklistPositions } from '@/lib/firestore'
+import { updateTrip, deleteTrip, completeTrip, addChecklist, savePhaseOrder, saveChecklistOrder, saveChecklistPositions, rateTrip } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { ChecklistCard } from './ChecklistCard'
 import { AddItemSheet } from './AddItemSheet'
@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog } from '@/components/ui/dialog'
-import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, Plus, Check, Tag, GripVertical } from 'lucide-react'
+import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, Plus, Check, Tag, GripVertical, Pencil, MapPin, Star } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -43,6 +43,44 @@ const STATUS_BADGE: Record<Trip['status'], { label: string; variant: 'default' |
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function StarIcon({ fill }: { fill: 'empty' | 'half' | 'full' }) {
+  return (
+    <div className="relative w-10 h-10">
+      <Star className="absolute inset-0 w-10 h-10 text-gray-200 fill-gray-200" />
+      {fill !== 'empty' && (
+        <div className={`absolute inset-0 overflow-hidden ${fill === 'half' ? 'w-1/2' : 'w-full'}`}>
+          <Star className="w-10 h-10 text-amber-400 fill-amber-400" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StarRating({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map(n => {
+        const fill: 'empty' | 'half' | 'full' = value >= n ? 'full' : value >= n - 0.5 ? 'half' : 'empty'
+        return (
+          <div key={n} className="relative w-10 h-10">
+            <StarIcon fill={fill} />
+            <button
+              className="absolute inset-y-0 left-0 w-1/2 z-10"
+              onClick={() => onChange(n - 0.5)}
+              aria-label={`Rate ${n - 0.5} stars`}
+            />
+            <button
+              className="absolute inset-y-0 right-0 w-1/2 z-10"
+              onClick={() => onChange(n)}
+              aria-label={`Rate ${n} stars`}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 // A draggable phase section (the whole group, with its header handle).
@@ -117,6 +155,9 @@ export function TripDetail() {
   const [newChecklist, setNewChecklist] = useState<{ name: string; phase: ChecklistPhase } | null>(null)
   const [savingChecklist, setSavingChecklist] = useState(false)
   const [editAmenities, setEditAmenities] = useState<string[] | null>(null)
+  const [editTitle, setEditTitle] = useState<string | null>(null)
+  const [ratingOpen, setRatingOpen] = useState(false)
+  const [pendingRating, setPendingRating] = useState(0)
 
   // Bought groceries get copied into the "Day of departure" checklist (bring to RV).
   const bringToRvId = checklists.find(c => c.phase === 'pre_dayof')?.id
@@ -190,6 +231,31 @@ export function TripDetail() {
     setEditAmenities(null)
   }
 
+  async function handleSaveTitle() {
+    if (editTitle === null || !editTitle.trim()) return
+    await updateTrip(id!, { title: editTitle.trim() })
+    setEditTitle(null)
+  }
+
+  function openInMaps() {
+    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trip.title)}`, '_blank', 'noopener,noreferrer')
+  }
+
+  async function handleRatingSubmit() {
+    if (!pendingRating) return
+    await rateTrip(id!, identity, pendingRating)
+    setRatingOpen(false)
+  }
+
+  function openRatingDialog() {
+    setPendingRating(trip.ratings?.[identity] ?? 0)
+    setRatingOpen(true)
+  }
+
+  function handleRatingDismiss() {
+    setRatingOpen(false)
+  }
+
   // Group checklists by phase (each group already sorted by `order`).
   const byPhase = checklists.reduce<Record<string, typeof checklists>>((acc, cl) => {
     if (!acc[cl.phase]) acc[cl.phase] = []
@@ -208,8 +274,15 @@ export function TripDetail() {
           <button onClick={() => navigate('/trips')} className="text-gray-600 p-1 -ml-1">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 flex items-center gap-1">
             <h1 className="text-lg font-bold text-gray-800 truncate">{trip.title}</h1>
+            <button
+              onClick={() => setEditTitle(trip.title)}
+              className="shrink-0 p-1 text-gray-400 hover:text-gray-600"
+              aria-label="Edit trip name"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
           </div>
           <Badge variant={badge.variant}>{badge.label}</Badge>
           <div className="relative">
@@ -249,6 +322,13 @@ export function TripDetail() {
         <div className="flex items-center gap-1 px-5 pb-3 text-sm text-gray-500">
           <CalendarDays className="w-4 h-4" />
           <span>{formatDate(trip.startDate)} — {formatDate(trip.endDate)}</span>
+          <button
+            onClick={openInMaps}
+            className="ml-2 p-1 text-gray-400 hover:text-[#2f6b4f] transition-colors"
+            aria-label="Open in Google Maps"
+          >
+            <MapPin className="w-4 h-4" />
+          </button>
         </div>
         <button
           onClick={() => setEditAmenities(trip.amenities)}
@@ -268,10 +348,38 @@ export function TripDetail() {
           )}
           <span className="text-xs text-[#2f6b4f] font-medium ml-1">Edit</span>
         </button>
+        {(trip.ratings?.diogo !== undefined || trip.ratings?.alice !== undefined) && (
+          <div className="flex items-center gap-2 px-5 pb-3 text-xs text-gray-500">
+            <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" />
+            {trip.ratings.diogo !== undefined && <span>Diogo {trip.ratings.diogo}/5</span>}
+            {trip.ratings.diogo !== undefined && trip.ratings.alice !== undefined && <span>·</span>}
+            {trip.ratings.alice !== undefined && <span>Alice {trip.ratings.alice}/5</span>}
+          </div>
+        )}
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-8 flex flex-col gap-6">
+        {/* Rate / Edit rating — always visible on completed trips */}
+        {trip.status === 'completed' && (
+          <div className="bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3 flex items-center gap-3">
+            <Star className="w-4 h-4 text-amber-400 fill-amber-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              {trip.ratings?.[identity] !== undefined ? (
+                <p className="text-sm text-gray-700">Your rating: <span className="font-semibold">{trip.ratings[identity]}/5</span></p>
+              ) : (
+                <p className="text-sm text-gray-700 font-medium">Rate this trip</p>
+              )}
+            </div>
+            <button
+              onClick={openRatingDialog}
+              className="text-sm font-semibold text-[#2f6b4f]"
+            >
+              {trip.ratings?.[identity] !== undefined ? 'Edit' : 'Rate'}
+            </button>
+          </div>
+        )}
+
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSectionDragEnd}>
           <SortableContext items={visiblePhases.map(p => `phase:${p}`)} strategy={verticalListSortingStrategy}>
             <div className="flex flex-col gap-6">
@@ -368,6 +476,39 @@ export function TripDetail() {
             </div>
           </div>
         )}
+      </Dialog>
+
+      {/* Edit title dialog */}
+      <Dialog open={editTitle !== null} onClose={() => setEditTitle(null)} title="Edit trip name">
+        {editTitle !== null && (
+          <div className="flex flex-col gap-4">
+            <Input
+              value={editTitle}
+              onChange={e => setEditTitle(e.target.value)}
+              autoFocus
+              onKeyDown={e => e.key === 'Enter' && handleSaveTitle()}
+            />
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setEditTitle(null)}>Cancel</Button>
+              <Button className="flex-1" onClick={handleSaveTitle} disabled={!editTitle.trim()}>Save</Button>
+            </div>
+          </div>
+        )}
+      </Dialog>
+
+      {/* Rate trip dialog */}
+      <Dialog open={ratingOpen} onClose={handleRatingDismiss} title="How was it?">
+        <div className="flex flex-col items-center gap-4">
+          <p className="text-sm text-gray-500 text-center">Rate your overall experience for <span className="font-medium text-gray-700">{trip.title}</span></p>
+          <StarRating value={pendingRating} onChange={setPendingRating} />
+          <p className="text-sm text-gray-400 h-5">
+            {pendingRating > 0 ? `${pendingRating} / 5` : 'Tap a star to rate'}
+          </p>
+          <div className="flex gap-2 w-full pt-1">
+            <Button variant="secondary" className="flex-1" onClick={handleRatingDismiss}>Skip</Button>
+            <Button className="flex-1" onClick={handleRatingSubmit} disabled={!pendingRating}>Save</Button>
+          </div>
+        </div>
       </Dialog>
 
       {/* New checklist dialog */}

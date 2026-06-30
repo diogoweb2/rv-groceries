@@ -58,6 +58,16 @@ export interface Trip {
   notes?: string
   /** Set true once usage stats have been recorded, so completion never double-counts. */
   statsRecorded?: boolean
+  /** Per-user experience ratings (1–5, half-step precision). */
+  ratings?: {
+    diogo?: number
+    alice?: number
+  }
+  /** Number of times each user has been auto-prompted to rate (max 2). */
+  ratingPrompts?: {
+    diogo?: number
+    alice?: number
+  }
 }
 
 export interface Checklist {

@@ -14,6 +14,7 @@ import {
   getDocs,
   getDoc,
   collectionGroup,
+  increment,
 } from 'firebase/firestore'
 import { db } from './firebase'
 import type {
@@ -723,6 +724,14 @@ export async function saveSortOrder(items: GroceryItem[], storeId: string | unde
     batch.update(ref, { [key]: idx })
   })
   await batch.commit()
+}
+
+export async function rateTrip(tripId: string, identity: UserIdentity, rating: number) {
+  await updateDoc(doc(db, 'trips', tripId), { [`ratings.${identity}`]: rating })
+}
+
+export async function incrementRatingPrompt(tripId: string, identity: UserIdentity) {
+  await updateDoc(doc(db, 'trips', tripId), { [`ratingPrompts.${identity}`]: increment(1) })
 }
 
 // Update stats when trip is completed

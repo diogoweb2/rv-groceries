@@ -4,8 +4,13 @@
   * {
     box-sizing: border-box;
   }
+  html {
+    height: 100%;
+  }
   body {
+    height: 100%;
     margin: 0;
+    overflow: hidden;
     font-family: system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     overscroll-behavior: none;
@@ -15,7 +20,7 @@
   }
   /* Mobile-first: full width on phones, centered phone-width column on desktop */
   #root {
-    height: 100dvh;
+    height: 100%;
     width: 100%;
     max-width: 480px;
     margin: 0 auto;

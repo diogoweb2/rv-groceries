@@ -36,8 +36,15 @@ manage packing checklists. The standalone "Supermarket" feature is currently **d
 ## 3. Trips
 
 - A trip has: title, start date, end date, amenities, status, creator, optional notes.
+- **Title editing.** The trip title can be edited after creation via a pencil icon in the trip detail header. The new title must be non-empty.
+- **Map shortcut.** A map-pin icon in the trip detail header opens Google Maps searching for the trip title (useful for campgrounds/locations).
 - **Creation requires** a title, a start date, and an end date. End date must be **on or
   after** the start date.
+- **Title autocomplete.** The trip title field suggests past trip titles as the user types
+  (case-insensitive substring match, ordered most-recent first).
+- **Amenity reuse.** Selecting a past title from autocomplete pre-fills the amenities with
+  those of the most recent trip to that same location. The user can still change them before
+  saving.
 - **Status** is one of: `planned`, `active`, `completed`, `cancelled`.
   - New trips start as `planned`.
   - **Automatic, date-driven progression.** A trip advances by its dates without any user
@@ -218,6 +225,29 @@ newly-created trip as a fresh, all-unchecked copy.
 - **No duplicates with persistent items.** If a persistent item (§12) targets a checklist
   with the same name+phase as a pinned checklist, it lands in that checklist; duplicates
   are skipped.
+
+## 14. Trip Ratings
+
+- When a trip is **completed** (automatically or manually), each user is prompted to rate
+  their overall experience.
+- **Rating scale:** 1 to 5 stars with **half-step precision** (0.5 increments: 1, 1.5, 2 … 5).
+- **Prompt — notification banner.** A "How was it?" banner appears at the top of the Trips
+  list the next time the user opens the app after a trip completes. Each identity is prompted
+  independently.
+- **Prompt count & auto-stop.** Each time the banner is shown, `ratingPrompts.<identity>`
+  increments on the trip document. After **2 prompts without a rating**, the banner no longer
+  auto-appears for that user. The count is stored in Firestore so the limit persists across
+  devices and sessions.
+- **Manual rating.** A "Rate" / "Edit" section is always visible inside the completed trip's
+  detail page, regardless of prompt count. Users can rate or update their rating at any time
+  from there.
+- **Per-identity storage.** Ratings are stored on the trip document as `ratings.diogo` and
+  `ratings.alice`, independently. Each user's rating is set separately and can be updated.
+- **Display.** Ratings appear:
+  - In the **trip card** (Trips list) below the amenity chips, as `★ Diogo X/5 · Alice X/5`.
+    Only identities that have rated are shown.
+  - In the **trip detail header**, below the amenity chips, in the same format.
+- Re-submitting overwrites the previous rating.
 
 ---
 
