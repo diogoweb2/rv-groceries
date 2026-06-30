@@ -10,9 +10,8 @@ const HomeScreen = lazy(() => import('@/features/HomeScreen').then(m => ({ defau
 const TripsList = lazy(() => import('@/features/trips/TripsList').then(m => ({ default: m.TripsList })))
 const NewTrip = lazy(() => import('@/features/trips/NewTrip').then(m => ({ default: m.NewTrip })))
 const TripDetail = lazy(() => import('@/features/trips/TripDetail').then(m => ({ default: m.TripDetail })))
-// Supermarket (top-level grocery) disabled for now — keep imports/routes commented to re-enable.
-// import { GroceryHome } from '@/features/grocery/GroceryHome'
-// import { GroceryDetail } from '@/features/grocery/GroceryDetail'
+const SupermarketHome = lazy(() => import('@/features/supermarket/SupermarketHome').then(m => ({ default: m.SupermarketHome })))
+const SupermarketDetail = lazy(() => import('@/features/supermarket/SupermarketDetail').then(m => ({ default: m.SupermarketDetail })))
 const ManageHome = lazy(() => import('@/features/manage/ManageHome').then(m => ({ default: m.ManageHome })))
 const AmenitiesPage = lazy(() => import('@/features/manage/AmenitiesPage').then(m => ({ default: m.AmenitiesPage })))
 const StoresPage = lazy(() => import('@/features/manage/StoresPage').then(m => ({ default: m.StoresPage })))
@@ -63,13 +62,13 @@ export default function App() {
             <Route element={<TabLayout />}>
               <Route path="/" element={<HomeScreen />} />
               <Route path="/trips" element={<TripsList />} />
-              {/* <Route path="/grocery" element={<GroceryHome />} /> */}
+              <Route path="/supermarket" element={<SupermarketHome />} />
             </Route>
 
             {/* Full-screen pushed screens — no tab bar, own back button */}
             <Route path="/trips/new" element={<NewTrip />} />
             <Route path="/trips/:id" element={<TripDetail />} />
-            {/* <Route path="/grocery/:id" element={<GroceryDetail />} /> */}
+            <Route path="/supermarket/:id" element={<SupermarketDetail />} />
 
             {/* Manage */}
             <Route path="/manage" element={<ManageHome />} />

@@ -4,10 +4,12 @@ import {
   subscribePinnedChecklists, subscribeTrips, subscribeChecklists,
   subscribeItems, subscribeGroceryLists, subscribeGroceryItems,
   subscribeOrdering, DEFAULT_PHASE_ORDER, subscribeTemplates,
+  subscribeSupermarketLists, subscribeSupermarketItems, subscribeNotifications,
 } from '@/lib/firestore'
 import type {
   Amenity, Store, CatalogItem, PinnedChecklist, Trip,
   Checklist, ChecklistItem, GroceryList, GroceryItem, OrderingPrefs, Template,
+  SupermarketList, SupermarketItem, AppNotification, UserIdentity,
 } from '@/types'
 
 export function useAmenities() {
@@ -82,5 +84,29 @@ export function useGroceryItems(listId: string | undefined) {
     if (!listId) return
     return subscribeGroceryItems(listId, setData)
   }, [listId])
+  return data
+}
+
+export function useSupermarketLists() {
+  const [data, setData] = useState<SupermarketList[]>([])
+  useEffect(() => subscribeSupermarketLists(setData), [])
+  return data
+}
+
+export function useSupermarketItems(listId: string | undefined) {
+  const [data, setData] = useState<SupermarketItem[]>([])
+  useEffect(() => {
+    if (!listId) return
+    return subscribeSupermarketItems(listId, setData)
+  }, [listId])
+  return data
+}
+
+export function useNotifications(identity: UserIdentity | null) {
+  const [data, setData] = useState<AppNotification[]>([])
+  useEffect(() => {
+    if (!identity) return
+    return subscribeNotifications(identity, setData)
+  }, [identity])
   return data
 }

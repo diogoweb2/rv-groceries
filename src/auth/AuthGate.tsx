@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { auth, getMessagingInstance } from '@/lib/firebase'
+import { saveFcmToken } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import type { UserIdentity } from '@/types'
 import { Tent, ShoppingCart, Loader2 } from 'lucide-react'
@@ -50,7 +51,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       if (permission !== 'granted') return
       const { getToken } = await import('firebase/messaging')
       const token = await getToken(messaging, { vapidKey: VAPID_KEY })
-      if (token) setFcmToken(token)
+      if (token) {
+        setFcmToken(token)
+        // Persist token→identity so a Cloud Function can target this person's pushes.
+        await saveFcmToken(token, id)
+      }
     } catch {
       // notifications not critical — silently ignore
     }

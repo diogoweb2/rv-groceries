@@ -4,8 +4,8 @@ This document captures the product/business rules implemented in the app. It is 
 source of truth for *behavior* — not code structure. Keep it updated when rules change.
 
 App: an offline-first PWA for two users (Diogo & Alice) to plan camping/RV trips and
-manage packing checklists. The standalone "Supermarket" feature is currently **disabled**
-(see §9); grocery handling lives inside camping trips.
+manage packing checklists. A standalone **Supermarket** feature (see §15) lets Alice build
+per-store shopping lists for Diogo; grocery handling also lives inside camping trips (§8).
 
 ---
 
@@ -27,11 +27,16 @@ manage packing checklists. The standalone "Supermarket" feature is currently **d
 ## 2. Notifications
 
 - After choosing an identity, the app requests notification permission (where supported).
-- If granted, an FCM token is obtained and held in app state.
+- If granted, an FCM token is obtained, held in app state, **and persisted** to the
+  `fcmTokens` collection mapped to the current identity (re-registering or switching identity
+  on a device overwrites that device's mapping cleanly).
+- **Delivery.** Cross-user notifications are written by the client as `notifications`
+  documents (each addressed `to` one identity). A Cloud Function (`onNotificationCreated`)
+  looks up the recipient's tokens and sends a real push to their devices, pruning any tokens
+  the messaging service reports as invalid. Unread notifications also appear **in-app** as a
+  banner (see §15) until dismissed.
 - Notifications are best-effort and non-blocking: failures are silently ignored and never
   block app usage.
-- **Known gap:** there is currently no backend Cloud Function delivering pushes, and the FCM
-  token is not persisted to Firestore, so end-to-end push delivery is not yet functional.
 
 ## 3. Trips
 
@@ -161,11 +166,13 @@ The `itemCatalog` collection is the **single global source** for item autocomple
   - It is a **copy, not a move**: the item stays (checked) in Groceries and appears (unchecked)
     in the RV list. Un-checking the grocery item does **not** remove it from the RV list.
 
-## 9. Disabled: standalone Supermarket
+## 9. Legacy generic grocery surface (retained, unused)
 
-- The top-level **Supermarket** feature (home card, bottom-tab, and `/grocery` routes) is
-  **disabled** to keep focus on camping. The grocery *section inside trips* (§8) is unaffected.
-- Code is retained and commented for easy re-enable.
+- The original generic grocery surface (`/grocery` routes, `GroceryHome`/`GroceryDetail`,
+  the `groceryLists` collection) is **not wired into the app**. It has been superseded by the
+  per-store **Supermarket** feature in §15 (`/supermarket`, `supermarketLists`). The grocery
+  *section inside trips* (§8) is unaffected.
+- The legacy code/components are retained but unreferenced.
 
 ## 10. Data Integrity Rules
 
@@ -255,6 +262,41 @@ newly-created trip as a fresh, all-unchecked copy.
     Only identities that have rated are shown.
   - In the **trip detail header**, below the amenity chips, in the same format.
 - Re-submitting overwrites the previous rating.
+
+## 15. Supermarket lists
+
+A standalone feature (its own bottom-tab **Supermarket**, after Camping; it does **not** appear
+on Home) for Alice to build shopping lists that Diogo fulfils. Each list targets one specific
+supermarket.
+
+- **Stores.** A list is for exactly one of three fixed stores: **NoFrills / FreshCo**,
+  **Dollarama**, **Costco**.
+- **One list per store, max three.** At most one **active** list may exist per store, so at
+  most three active lists total. Creating a list prompts for the store, offering only stores
+  without an active list. When all three stores have an active list, the **New list** button is
+  hidden.
+- **Status.** A new list is **active**. The shopper marks items bought (a check), then taps
+  **COMPLETE**. Completing sets the status to **complete**, which **hides the list** from the
+  Supermarket tab (only active lists are shown). Completion is allowed **whether or not**
+  everything was bought — the shopper can complete with items still unbought (e.g. something was
+  out of stock).
+- **Completion notification.** Completing a list sends a notification (§2) to the **other**
+  person:
+  - If every item was bought: *"<Name> bought everything on the <store> list"*.
+  - Otherwise: *"<Name> finished the <store> list. Couldn't get: <missed items>"* (the unbought
+    item names).
+- **Camping items.** Any item can be flagged **for camping**, either by a per-item tent toggle
+  or by the shorthand **`<name> -> camping`** (also `→ camping`) when adding — the suffix is
+  stripped and the item is flagged.
+  - When a camping-flagged item is **bought** (checked), it is **copied** into the next trip's
+    **Day of departure** (`pre_dayof`, "move to RV/truck") list. The target trip is the
+    **active** trip, else the **soonest upcoming** non-cancelled/non-completed trip. No-op if
+    there is no eligible trip or it has no `pre_dayof` checklist. The copy is idempotent (skips
+    a same-name item already there). Flagging an already-bought item triggers the same copy.
+- **Autocomplete.** Adding an item suggests **supermarket items only** — catalog entries of
+  category `grocery` or `general` (never `camping`) — ranked by grocery usage. New custom names
+  are registered to the catalog as `grocery`.
+- **No pinning.** Supermarket items have no persist/pin behaviour.
 
 ---
 

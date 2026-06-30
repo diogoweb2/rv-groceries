@@ -6,6 +6,12 @@ export type TripStatus = 'planned' | 'active' | 'completed' | 'cancelled'
 
 export type GroceryListStatus = 'draft' | 'sent'
 
+/** The fixed set of supermarkets a list can be for. */
+export type SupermarketStore = 'nofrills_freshco' | 'dollarama' | 'costco'
+
+/** A supermarket list is `active` until the shopper marks it `complete` (then hidden). */
+export type SupermarketListStatus = 'active' | 'complete'
+
 export interface Amenity {
   id: string
   name: string
@@ -162,6 +168,54 @@ export interface GroceryItem {
   baseRev: number
   updatedBy: UserIdentity
   updatedAt: string
+}
+
+/**
+ * A shopping list for one specific supermarket. Only one active list may exist
+ * per store, and at most three active lists total (one per store). See §15.
+ */
+export interface SupermarketList {
+  id: string
+  store: SupermarketStore
+  status: SupermarketListStatus
+  createdBy: UserIdentity
+  createdAt: string
+  completedAt?: string
+  completedBy?: UserIdentity
+}
+
+export interface SupermarketItem {
+  id: string
+  listId: string
+  catalogItemId?: string
+  name: string
+  qty?: string
+  /** When true, once bought this item is copied into the next trip's RV list (§15). */
+  forCamping?: boolean
+  /** Whether the shopper has bought this item. */
+  checked: boolean
+  order: number
+  rev: number
+  baseRev: number
+  updatedBy: UserIdentity
+  updatedAt: string
+}
+
+/**
+ * An in-app / push notification addressed to a single identity. Created by the
+ * client (e.g. on supermarket-list completion) and delivered as a real push by
+ * a Cloud Function. Rendered as a banner in-app until dismissed.
+ */
+export interface AppNotification {
+  id: string
+  to: UserIdentity
+  from: UserIdentity
+  title: string
+  body: string
+  /** Tag for the originating feature, e.g. 'supermarket'. */
+  type?: string
+  createdAt: string
+  read: boolean
 }
 
 export interface Conflict {

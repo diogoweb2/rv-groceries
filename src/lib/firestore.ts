@@ -7,6 +7,7 @@ import {
   deleteDoc,
   onSnapshot,
   query,
+  where,
   orderBy,
   serverTimestamp,
   Timestamp,
@@ -20,7 +21,8 @@ import { db } from './firebase'
 import type {
   Trip, Checklist, ChecklistItem, Amenity, Store, CatalogItem,
   GroceryList, GroceryItem, UserIdentity, OrderingPrefs, ChecklistPhase,
-  PersistentItem, TripStatus, PinnedChecklist, Template
+  PersistentItem, TripStatus, PinnedChecklist, Template,
+  SupermarketList, SupermarketItem, SupermarketStore, AppNotification
 } from '@/types'
 
 export const DEFAULT_PHASE_ORDER: ChecklistPhase[] = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
@@ -783,6 +785,186 @@ export async function updateTemplate(id: string, data: Partial<Template>) {
 
 export async function deleteTemplate(id: string) {
   return deleteDoc(doc(db, 'templates', id))
+}
+
+// ── Supermarket lists ──────────────────────────────────────────────────────────
+// A shopping list per supermarket (one active list per store, max three). Alice
+// builds a list; Diogo shops and marks each item bought, then completes the list
+// (which hides it and notifies the other person). See §15.
+
+export const SUPERMARKET_STORES: { id: SupermarketStore; label: string }[] = [
+  { id: 'nofrills_freshco', label: 'NoFrills / FreshCo' },
+  { id: 'dollarama', label: 'Dollarama' },
+  { id: 'costco', label: 'Costco' },
+]
+
+export function supermarketStoreLabel(store: SupermarketStore): string {
+  return SUPERMARKET_STORES.find(s => s.id === store)?.label ?? store
+}
+
+// Recognise the "<name> -> camping" shorthand (also "→ camping", "->camping")
+// used to flag an item as camping. Returns the cleaned name and the flag.
+export function parseCampingFlag(raw: string): { name: string; forCamping: boolean } {
+  const m = raw.match(/^(.*?)\s*(?:-+>|→)\s*camping\s*$/i)
+  if (m && m[1].trim()) return { name: m[1].trim(), forCamping: true }
+  return { name: raw.trim(), forCamping: false }
+}
+
+export function subscribeSupermarketLists(cb: (lists: SupermarketList[]) => void) {
+  return onSnapshot(
+    query(collection(db, 'supermarketLists'), orderBy('createdAt', 'desc')),
+    (snap) => cb(snap.docs.map((d) => docData<SupermarketList>(d)))
+  )
+}
+
+export async function addSupermarketList(store: SupermarketStore, identity: UserIdentity) {
+  return addDoc(collection(db, 'supermarketLists'), clean({
+    store,
+    status: 'active' as const,
+    createdBy: identity,
+    createdAt: serverTimestamp(),
+  }))
+}
+
+export function subscribeSupermarketItems(listId: string, cb: (items: SupermarketItem[]) => void) {
+  return onSnapshot(
+    query(collection(db, 'supermarketLists', listId, 'items'), orderBy('order')),
+    (snap) => cb(snap.docs.map((d) => docData<SupermarketItem>(d)))
+  )
+}
+
+export async function addSupermarketItem(
+  listId: string,
+  data: Omit<SupermarketItem, 'id' | 'listId' | 'rev' | 'baseRev' | 'updatedBy' | 'updatedAt'>,
+  identity: UserIdentity,
+) {
+  return addDoc(collection(db, 'supermarketLists', listId, 'items'), clean({
+    ...data,
+    listId,
+    rev: 1,
+    baseRev: 0,
+    updatedBy: identity,
+    updatedAt: new Date().toISOString(),
+  }))
+}
+
+export async function updateSupermarketItem(
+  listId: string,
+  itemId: string,
+  data: Partial<SupermarketItem>,
+  identity: UserIdentity,
+  currentRev: number,
+) {
+  return updateDoc(doc(db, 'supermarketLists', listId, 'items', itemId), clean({
+    ...data,
+    updatedBy: identity,
+    updatedAt: new Date().toISOString(),
+    baseRev: currentRev,
+    rev: currentRev + 1,
+  }))
+}
+
+export async function deleteSupermarketItem(listId: string, itemId: string) {
+  return deleteDoc(doc(db, 'supermarketLists', listId, 'items', itemId))
+}
+
+// Mark a list complete: hide it from the active view, record who/when, and notify
+// the other person whether everything was bought or what was missed (§15).
+export async function completeSupermarketList(
+  list: SupermarketList,
+  items: SupermarketItem[],
+  identity: UserIdentity,
+) {
+  const storeLabel = supermarketStoreLabel(list.store)
+  const missed = items.filter(i => !i.checked).map(i => i.name)
+  const who = identity === 'diogo' ? 'Diogo' : 'Alice'
+  const title = missed.length === 0 ? 'Shopping done 🎉' : 'Shopping update'
+  const body = missed.length === 0
+    ? `${who} bought everything on the ${storeLabel} list`
+    : `${who} finished the ${storeLabel} list. Couldn't get: ${missed.join(', ')}`
+
+  await updateDoc(doc(db, 'supermarketLists', list.id), {
+    status: 'complete',
+    completedAt: new Date().toISOString(),
+    completedBy: identity,
+  })
+
+  const recipient: UserIdentity = identity === 'diogo' ? 'alice' : 'diogo'
+  await sendNotification({ to: recipient, from: identity, title, body, type: 'supermarket' })
+}
+
+// Copy a bought camping item into the next trip's "Day of departure" (RV/truck)
+// list, picking the active trip or the soonest upcoming one. No-op if there is no
+// eligible trip or it has no `pre_dayof` checklist. Idempotent (skips duplicates).
+export async function moveCampingItemToNextTrip(
+  item: { name: string; catalogItemId?: string; qty?: string },
+  trips: Trip[],
+  identity: UserIdentity,
+) {
+  const today = new Date().toISOString().slice(0, 10)
+  const target =
+    trips.find(t => t.status === 'active') ??
+    trips
+      .filter(t => t.startDate >= today && t.status !== 'cancelled' && t.status !== 'completed')
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))[0]
+  if (!target) return
+
+  const checklistsSnap = await getDocs(collection(db, 'trips', target.id, 'checklists'))
+  const dayOf = checklistsSnap.docs
+    .filter(d => (d.data().phase as ChecklistPhase) === 'pre_dayof')
+    .sort((a, b) => ((a.data().order as number) ?? 0) - ((b.data().order as number) ?? 0))[0]
+  if (!dayOf) return
+
+  await copyItemToChecklist(target.id, dayOf.id, item, identity)
+}
+
+// ── Notifications ────────────────────────────────────────────────────────────
+// Cross-user notifications. The client writes a notification doc; a Cloud
+// Function delivers it as a real push to the recipient's devices. Unread docs are
+// also shown in-app as a banner until dismissed.
+
+export async function sendNotification(
+  data: Omit<AppNotification, 'id' | 'createdAt' | 'read'>,
+) {
+  return addDoc(collection(db, 'notifications'), clean({
+    ...data,
+    read: false,
+    createdAt: new Date().toISOString(),
+  }))
+}
+
+export function subscribeNotifications(identity: UserIdentity, cb: (items: AppNotification[]) => void) {
+  return onSnapshot(
+    query(
+      collection(db, 'notifications'),
+      where('to', '==', identity),
+      where('read', '==', false),
+    ),
+    (snap) =>
+      cb(
+        snap.docs
+          .map((d) => docData<AppNotification>(d))
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      ),
+  )
+}
+
+export async function markNotificationRead(id: string) {
+  return updateDoc(doc(db, 'notifications', id), { read: true })
+}
+
+// ── FCM tokens ───────────────────────────────────────────────────────────────
+// Persist each device's push token mapped to the identity in use, so a Cloud
+// Function can target the right person. Keyed by token so re-registering or
+// switching identity on a device overwrites cleanly.
+
+export async function saveFcmToken(token: string, identity: UserIdentity) {
+  const key = token.replace(/[/.#$[\]]/g, '_')
+  await setDoc(doc(db, 'fcmTokens', key), {
+    token,
+    identity,
+    updatedAt: new Date().toISOString(),
+  })
 }
 
 export { toDate }

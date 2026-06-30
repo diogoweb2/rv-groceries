@@ -1,11 +1,11 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Home, Tent } from 'lucide-react'
+import { Home, Tent, ShoppingCart } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
 const TABS = [
   { path: '/', icon: Home, label: 'Home', exact: true },
   { path: '/trips', icon: Tent, label: 'Camping', exact: false },
-  // Supermarket tab disabled for now — re-add { path: '/grocery', icon: ShoppingCart, label: 'Supermarket', exact: false } to restore.
+  { path: '/supermarket', icon: ShoppingCart, label: 'Supermarket', exact: false },
 ]
 
 export function BottomNav() {
