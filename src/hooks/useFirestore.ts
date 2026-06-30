@@ -3,11 +3,11 @@ import {
   subscribeAmenities, subscribeStores, subscribeCatalog,
   subscribePinnedChecklists, subscribeTrips, subscribeChecklists,
   subscribeItems, subscribeGroceryLists, subscribeGroceryItems,
-  subscribeOrdering, DEFAULT_PHASE_ORDER,
+  subscribeOrdering, DEFAULT_PHASE_ORDER, subscribeTemplates,
 } from '@/lib/firestore'
 import type {
   Amenity, Store, CatalogItem, PinnedChecklist, Trip,
-  Checklist, ChecklistItem, GroceryList, GroceryItem, OrderingPrefs,
+  Checklist, ChecklistItem, GroceryList, GroceryItem, OrderingPrefs, Template,
 } from '@/types'
 
 export function useAmenities() {
@@ -67,6 +67,12 @@ export function useOrdering() {
 export function useGroceryLists() {
   const [data, setData] = useState<GroceryList[]>([])
   useEffect(() => subscribeGroceryLists(setData), [])
+  return data
+}
+
+export function useTemplates() {
+  const [data, setData] = useState<Template[]>([])
+  useEffect(() => subscribeTemplates(setData), [])
   return data
 }
 

@@ -19,7 +19,7 @@ import { db } from './firebase'
 import type {
   Trip, Checklist, ChecklistItem, Amenity, Store, CatalogItem,
   GroceryList, GroceryItem, UserIdentity, OrderingPrefs, ChecklistPhase,
-  PersistentItem, TripStatus, PinnedChecklist
+  PersistentItem, TripStatus, PinnedChecklist, Template
 } from '@/types'
 
 export const DEFAULT_PHASE_ORDER: ChecklistPhase[] = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
@@ -754,6 +754,26 @@ export async function recordTripStats(
   }
 
   await batch.commit()
+}
+
+// ── Templates ─────────────────────────────────────────────────────────────────
+
+export function subscribeTemplates(cb: (items: Template[]) => void) {
+  return onSnapshot(query(collection(db, 'templates'), orderBy('name')), (snap) =>
+    cb(snap.docs.map((d) => docData<Template>(d)))
+  )
+}
+
+export async function addTemplate(data: Omit<Template, 'id'>) {
+  return addDoc(collection(db, 'templates'), data)
+}
+
+export async function updateTemplate(id: string, data: Partial<Template>) {
+  return updateDoc(doc(db, 'templates', id), data)
+}
+
+export async function deleteTemplate(id: string) {
+  return deleteDoc(doc(db, 'templates', id))
 }
 
 export { toDate }
