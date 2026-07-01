@@ -53,7 +53,7 @@ async function listenForegroundMessages() {
     const { onMessage } = await import('firebase/messaging')
     const reg = await navigator.serviceWorker?.getRegistration()
     onMessage(messaging, (payload) => {
-      const { title = 'RV & Groceries', body = '' } = payload.notification ?? {}
+      const { title = 'RV & Groceries', body = '' } = payload.data ?? {}
       if (reg) reg.showNotification(title, { body, icon: '/pwa-192x192.png', badge: '/pwa-192x192.png' })
       else if (Notification.permission === 'granted') new Notification(title, { body })
     })

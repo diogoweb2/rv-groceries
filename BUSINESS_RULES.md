@@ -32,13 +32,13 @@ per-store shopping lists for Diogo; grocery handling also lives inside camping t
   on a device overwrites that device's mapping cleanly).
 - **Delivery.** Cross-user notifications are written by the client as `notifications`
   documents (each addressed `to` one identity). A Cloud Function (`onNotificationCreated`)
-  looks up the recipient's tokens and sends a real **native/system push** (with app icon and a
-  tap-through link to the app) to their devices, pruning any tokens the messaging service
-  reports as invalid. Unread notifications also appear **in-app** as a banner (see §15) until
-  dismissed.
-- **Shared devices.** Devices are shared and a household member may be signed in as either
-  identity, so events that should reach the household (e.g. supermarket-list completion, §15)
-  are pushed to **both** identities, not only the "other" person.
+  looks up the recipient's tokens and sends a real **native/system push** to their devices,
+  pruning any tokens the messaging service reports as invalid. The push is delivered as a
+  **data-only** message that the service worker renders as exactly one system notification
+  (no in-app banner). Once delivered, the `notifications` doc is deleted — it is a one-shot
+  push trigger, not persistent state.
+- Notifications are **native only**: they appear in the OS notification tray/lock screen, never
+  as an in-app banner.
 - Notifications are best-effort and non-blocking: failures are silently ignored and never
   block app usage.
 
@@ -284,8 +284,8 @@ supermarket.
   Supermarket tab (only active lists are shown). Completion is allowed **whether or not**
   everything was bought — the shopper can complete with items still unbought (e.g. something was
   out of stock).
-- **Completion notification.** Completing a list sends a notification (§2) to **both people**
-  (shared devices — see §2), so it lands on whichever device/identity is in use:
+- **Completion notification.** Completing a list sends a notification (§2) to the **other**
+  person (the shopper who completed is not notified about their own action):
   - If every item was bought: *"<Name> bought everything on the <store> list"*.
   - Otherwise: *"<Name> finished the <store> list. Couldn't get: <missed items>"* (the unbought
     item names).

@@ -12,8 +12,10 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging()
 
+// Data-only messages (see functions/src/index.ts) render exactly one notification
+// here, avoiding the duplicate that a top-level `notification` payload would add.
 messaging.onBackgroundMessage((payload) => {
-  const { title = 'RV & Groceries', body = '' } = payload.notification ?? {}
+  const { title = 'RV & Groceries', body = '' } = payload.data ?? {}
   self.registration.showNotification(title, {
     body,
     icon: '/pwa-192x192.png',

@@ -889,16 +889,10 @@ export async function completeSupermarketList(
     completedBy: identity,
   })
 
-  // Notify both people (§2/§15): devices are shared and a household member may be
-  // signed in as either identity, so we push the completion to everyone rather
-  // than only the other person. Each identity's devices get one native push plus
-  // an in-app banner.
-  const recipients: UserIdentity[] = ['diogo', 'alice']
-  await Promise.all(
-    recipients.map((to) =>
-      sendNotification({ to, from: identity, title, body, type: 'supermarket' }),
-    ),
-  )
+  // Notify only the other person (§15) — the shopper who completed doesn't get a
+  // notification about their own action.
+  const recipient: UserIdentity = identity === 'diogo' ? 'alice' : 'diogo'
+  await sendNotification({ to: recipient, from: identity, title, body, type: 'supermarket' })
 }
 
 // Copy a bought camping item into the next trip's "Day of departure" (RV/truck)

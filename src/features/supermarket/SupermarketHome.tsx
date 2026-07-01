@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSupermarketLists, useSupermarketItems, useNotifications } from '@/hooks/useFirestore'
+import { useSupermarketLists, useSupermarketItems } from '@/hooks/useFirestore'
 import {
-  addSupermarketList, markNotificationRead, SUPERMARKET_STORES, supermarketStoreLabel,
+  addSupermarketList, SUPERMARKET_STORES, supermarketStoreLabel,
 } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Dialog } from '@/components/ui/dialog'
-import { Plus, ShoppingCart, ChevronRight, Bell, X } from 'lucide-react'
+import { Plus, ShoppingCart, ChevronRight } from 'lucide-react'
 import type { SupermarketList, SupermarketStore } from '@/types'
 
 // One active-list card; subscribes its items to show bought/total progress.
@@ -37,7 +37,6 @@ export function SupermarketHome() {
   const navigate = useNavigate()
   const lists = useSupermarketLists()
   const identity = useAppStore(s => s.identity)!
-  const notifications = useNotifications(identity)
   const [picking, setPicking] = useState(false)
   const [creating, setCreating] = useState(false)
 
@@ -70,27 +69,6 @@ export function SupermarketHome() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-4">
-        {/* Notification banners */}
-        {notifications.map(n => (
-          <div
-            key={n.id}
-            className="flex items-start gap-3 bg-emerald-50 border border-emerald-100 rounded-2xl px-4 py-3 mb-3"
-          >
-            <Bell className="w-5 h-5 text-[#2f6b4f] shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-gray-800 text-sm">{n.title}</p>
-              <p className="text-sm text-gray-600">{n.body}</p>
-            </div>
-            <button
-              onClick={() => markNotificationRead(n.id)}
-              className="text-gray-400 hover:text-gray-600 p-0.5 shrink-0"
-              aria-label="Dismiss"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        ))}
-
         {active.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400">
             <ShoppingCart className="w-14 h-14 mb-3" strokeWidth={1.2} />

@@ -42,23 +42,22 @@ export const onNotificationCreated = onDocumentCreated(
     logger.info(`Notification for "${to}": found ${tokens.length} token(s)`, {
       to, title,
     });
-    if (tokens.length === 0) return;
+    if (tokens.length === 0) {
+      await event.data?.ref.delete();
+      return;
+    }
 
+    // Data-only message: the notification is rendered exactly once by the
+    // service worker's onBackgroundMessage handler (and by the in-page
+    // onMessage handler when the app is focused). We deliberately omit the
+    // top-level `notification`/`webpush.notification` payload — including it
+    // makes the SDK auto-display a second notification, causing duplicates.
     const res = await getMessaging().sendEachForMulticast({
       tokens,
-      notification: {title, body},
-      data: {type: (data.type as string) ?? "general"},
-      // Explicit web-push block so Chrome/Android reliably render a native
-      // system notification (not just an in-page message) and tapping it opens
-      // the app.
-      webpush: {
-        notification: {
-          title,
-          body,
-          icon: "/pwa-192x192.png",
-          badge: "/pwa-192x192.png",
-        },
-        fcmOptions: {link: "/"},
+      data: {
+        title,
+        body,
+        type: (data.type as string) ?? "general",
       },
     });
     logger.info(
@@ -79,5 +78,9 @@ export const onNotificationCreated = onDocumentCreated(
       }
     });
     await Promise.all(stale);
+
+    // The notification doc is a one-shot push trigger with no in-app reader, so
+    // remove it once delivered to keep the collection from growing unbounded.
+    await event.data?.ref.delete();
   }
 );
