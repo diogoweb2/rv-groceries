@@ -24,7 +24,7 @@ import type {
   GroceryList, GroceryItem, UserIdentity, OrderingPrefs, ChecklistPhase,
   PersistentItem, TripStatus, PinnedChecklist, Template,
   SupermarketList, SupermarketItem, SupermarketSortMemory,
-  AppNotification
+  AppNotification, Feedback
 } from '@/types'
 
 export const DEFAULT_PHASE_ORDER: ChecklistPhase[] = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
@@ -323,6 +323,113 @@ export async function savePinnedChecklist(
     updatedAt: new Date().toISOString(),
     updatedBy: identity,
   })
+}
+
+// Find or create the checklist matching phase+name in a trip, returning its id
+// and the lowercased names of items already in it (for de-duping pushes).
+async function findOrCreateChecklistByName(
+  tripId: string,
+  phase: ChecklistPhase,
+  name: string,
+): Promise<{ checklistId: string; existingNames: Set<string>; created: boolean }> {
+  const checklistsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
+  const target = checklistsSnap.docs.find(
+    (d) => d.data().phase === phase && ((d.data().name as string) ?? '').trim().toLowerCase() === name.trim().toLowerCase(),
+  )
+  if (target) {
+    const itemsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists', target.id, 'items'))
+    return {
+      checklistId: target.id,
+      existingNames: new Set(itemsSnap.docs.map((d) => ((d.data().name as string) ?? '').toLowerCase())),
+      created: false,
+    }
+  }
+  const order = checklistsSnap.docs.filter((d) => d.data().phase === phase).length
+  const clRef = await addDoc(collection(db, 'trips', tripId, 'checklists'), { tripId, name, phase, order, pinned: true })
+  return { checklistId: clRef.id, existingNames: new Set(), created: true }
+}
+
+// Trips eligible for an immediate pin push: active or planned (not
+// completed/cancelled), excluding the trip the pin originated on (it already
+// has the item/checklist).
+async function upcomingTripsExcluding(excludeTripId: string) {
+  const tripsSnap = await getDocs(collection(db, 'trips'))
+  return tripsSnap.docs.filter((d) => {
+    if (d.id === excludeTripId) return false
+    const status = d.data().status as TripStatus
+    return status === 'active' || status === 'planned'
+  })
+}
+
+// Immediately mirror a just-pinned item into every other active/planned trip
+// (not just future new trips seeded later — see §12). Idempotent per trip:
+// skips a trip whose target checklist already has a same-name item.
+async function pushPersistentItemToTrips(
+  excludeTripId: string,
+  rec: Omit<PersistentItem, 'id'>,
+  identity: UserIdentity,
+) {
+  const targets = await upcomingTripsExcluding(excludeTripId)
+  for (const tripDoc of targets) {
+    const tripId = tripDoc.id
+    const { checklistId, existingNames } = await findOrCreateChecklistByName(tripId, rec.phase, rec.checklistName)
+    if (existingNames.has(rec.name.toLowerCase())) continue
+    await addDoc(collection(db, 'trips', tripId, 'checklists', checklistId, 'items'), clean({
+      tripId,
+      checklistId,
+      catalogItemId: rec.catalogItemId || undefined,
+      name: rec.name,
+      qty: rec.qty ?? '',
+      checked: false,
+      order: existingNames.size,
+      rev: 1,
+      baseRev: 0,
+      updatedBy: identity,
+      updatedAt: new Date().toISOString(),
+    }))
+  }
+}
+
+// Immediately mirror a just-pinned checklist (and its current items) into
+// every other active/planned trip (see §13). Idempotent per trip/item: skips
+// items that already exist by name in the target checklist.
+export async function pushPinnedChecklistToTrips(
+  excludeTripId: string,
+  name: string,
+  phase: ChecklistPhase,
+  items: ChecklistItem[],
+  identity: UserIdentity,
+) {
+  const targets = await upcomingTripsExcluding(excludeTripId)
+  for (const tripDoc of targets) {
+    const tripId = tripDoc.id
+    const { checklistId, existingNames } = await findOrCreateChecklistByName(tripId, phase, name)
+    const batch = writeBatch(db)
+    let order = existingNames.size
+    let changed = false
+    for (const item of items) {
+      const key = item.name.toLowerCase()
+      if (existingNames.has(key)) continue
+      const itemRef = doc(collection(db, 'trips', tripId, 'checklists', checklistId, 'items'))
+      batch.set(itemRef, clean({
+        tripId,
+        checklistId,
+        catalogItemId: item.catalogItemId || undefined,
+        name: item.name,
+        qty: item.qty || '',
+        checked: false,
+        order,
+        rev: 1,
+        baseRev: 0,
+        updatedBy: identity,
+        updatedAt: new Date().toISOString(),
+      }))
+      existingNames.add(key)
+      order++
+      changed = true
+    }
+    if (changed) await batch.commit()
+  }
 }
 
 export async function removePinnedChecklist(phase: ChecklistPhase, name: string) {
@@ -800,10 +907,9 @@ export async function setItemPersist(
 ) {
   await updateItem(tripId, checklist.id, item.id, { persist }, identity, item.rev)
   if (persist && !item.checked) {
-    await addPersistentItem(
-      { name: item.name, phase: checklist.phase, checklistName: checklist.name, catalogItemId: item.catalogItemId, qty: item.qty },
-      identity,
-    )
+    const rec = { name: item.name, phase: checklist.phase, checklistName: checklist.name, catalogItemId: item.catalogItemId, qty: item.qty }
+    await addPersistentItem(rec, identity)
+    await pushPersistentItemToTrips(tripId, rec, identity)
   } else if (!persist) {
     await removePersistentItem(checklist.phase, checklist.name, item.name)
   }
@@ -1408,6 +1514,40 @@ export async function learnSupermarketOrder(
     }
   })
   await setDoc(SUPERMARKET_SORT_DOC, { stores: { [store]: words } }, { merge: true })
+}
+
+// ── Feedback (bugs & ideas) ────────────────────────────────────────────────────
+// A shared, sortable to-do list of reported bugs and improvement ideas (§17).
+// Completing an entry simply deletes it.
+
+export function subscribeFeedback(cb: (items: Feedback[]) => void) {
+  return onSnapshot(query(collection(db, 'feedback'), orderBy('order')), (snap) =>
+    cb(snap.docs.map((d) => docData<Feedback>(d)))
+  )
+}
+
+export async function addFeedback(
+  data: Omit<Feedback, 'id' | 'createdAt'>,
+) {
+  return addDoc(collection(db, 'feedback'), clean({
+    ...data,
+    createdAt: new Date().toISOString(),
+  }))
+}
+
+export async function updateFeedback(id: string, data: Partial<Feedback>) {
+  return updateDoc(doc(db, 'feedback', id), clean(data))
+}
+
+export async function deleteFeedback(id: string) {
+  return deleteDoc(doc(db, 'feedback', id))
+}
+
+// Persist the list position of each entry after a drag reorder.
+export async function saveFeedbackPositions(ordered: { id: string; order: number }[]) {
+  const batch = writeBatch(db)
+  ordered.forEach(({ id, order }) => batch.update(doc(db, 'feedback', id), { order }))
+  await batch.commit()
 }
 
 // ── Notifications ────────────────────────────────────────────────────────────

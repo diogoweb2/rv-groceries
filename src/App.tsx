@@ -19,6 +19,7 @@ const ManageHome = lazy(() => import('@/features/manage/ManageHome').then(m => (
 const AmenitiesPage = lazy(() => import('@/features/manage/AmenitiesPage').then(m => ({ default: m.AmenitiesPage })))
 const StoresPage = lazy(() => import('@/features/manage/StoresPage').then(m => ({ default: m.StoresPage })))
 const CatalogPage = lazy(() => import('@/features/manage/CatalogPage').then(m => ({ default: m.CatalogPage })))
+const FeedbackPage = lazy(() => import('@/features/manage/FeedbackPage').then(m => ({ default: m.FeedbackPage })))
 
 // Keeps the global catalog clean and complete, once per device: removes any
 // duplicate-name entries, then seeds names from items already in lists.
@@ -39,16 +40,17 @@ function CatalogSync() {
 }
 
 // Seeds the default stores and links Supermarket lists / trip grocery
-// checklists to Store records, once per device (§11/§15).
+// checklists to Store records. Runs every load (not gated behind a one-time
+// flag) — each step only touches docs that still need it, so it's cheap and
+// self-healing rather than getting permanently stuck if one run partially
+// no-ops (e.g. a legacy doc that didn't match on a prior run).
 function StoreSync() {
   useEffect(() => {
-    if (localStorage.getItem('storeSyncV1')) return
     ;(async () => {
       try {
         await ensureDefaultStores()
         await migrateSupermarketListsToStoreIds()
         await migrateGroceryChecklistsToStoreIds()
-        localStorage.setItem('storeSyncV1', '1')
       } catch {
         /* non-critical — will retry next load */
       }
@@ -98,6 +100,7 @@ export default function App() {
             <Route path="/manage/amenities" element={<AmenitiesPage />} />
             <Route path="/manage/stores" element={<StoresPage />} />
             <Route path="/manage/catalog" element={<CatalogPage />} />
+            <Route path="/manage/feedback" element={<FeedbackPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

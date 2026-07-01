@@ -1,10 +1,11 @@
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Tag, Store, Waves } from 'lucide-react'
+import { ArrowLeft, Tag, Store, Waves, Bug } from 'lucide-react'
 
 const sections = [
   { label: 'Amenities', description: 'Beach, pool, tennis…', icon: Waves, path: '/manage/amenities' },
   { label: 'Stores', description: 'Lidl, Aldi, pharmacy…', icon: Store, path: '/manage/stores' },
   { label: 'Saved items', description: 'Autocomplete list — remove unused items', icon: Tag, path: '/manage/catalog' },
+  { label: 'Bugs & ideas', description: 'Log bugs and improvements to sort', icon: Bug, path: '/manage/feedback' },
 ]
 
 export function ManageHome() {

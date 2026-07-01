@@ -6,6 +6,9 @@ export type TripStatus = 'planned' | 'active' | 'completed' | 'cancelled'
 
 export type GroceryListStatus = 'draft' | 'sent'
 
+/** A feedback entry is either a reported bug or a suggested improvement (§17). */
+export type FeedbackKind = 'bug' | 'improvement'
+
 /** A supermarket list is `active` until the shopper marks it `complete` (then hidden). */
 export type SupermarketListStatus = 'active' | 'complete'
 
@@ -243,6 +246,23 @@ export interface AppNotification {
   type?: string
   createdAt: string
   read: boolean
+}
+
+/**
+ * A bug report or improvement idea logged from Manage → Bugs & ideas (§17). A
+ * simple, sortable to-do list; completing an entry deletes it.
+ */
+export interface Feedback {
+  id: string
+  kind: FeedbackKind
+  text: string
+  /** Position in the shared list (0-based), set by drag reordering. */
+  order: number
+  /** When true, the entry is completed — hidden from the working list but kept
+   * so it can be restored from the Completed filter (§17). */
+  done?: boolean
+  createdBy: UserIdentity
+  createdAt: string
 }
 
 export interface Conflict {

@@ -235,6 +235,7 @@ The `itemCatalog` collection is the **single global source** for item autocomple
   FreshCo**, **Dollarama**, and **Costco**; more can be added, renamed, or removed here, which
   changes what's available in both Groceries and Supermarket going forward.
 - **Saved items (catalog)** — see §7.
+- **Bugs & ideas** — a sortable log of bug reports and improvement ideas (§17).
 
 ## 12. Persistent (recurring) items
 
@@ -245,6 +246,11 @@ A persistent item carries over to **future** trips so the user doesn't have to r
   long as it remains unchecked**. Checking it (packed/bought) removes it from the recurring
   set so it stops carrying forward; un-checking it again restores it. Turning the pin off
   removes it from the recurring set regardless of checked state.
+- **Immediate push to existing upcoming trips.** Pinning an item doesn't only affect trips
+  created afterward — it also immediately mirrors the item into every **other** trip that is
+  currently `active` or `planned` (not `completed`/`cancelled`), landing in the checklist with
+  the same name+phase (created if missing). Skipped per-trip if that trip's target checklist
+  already has a same-name item. Un-pinning does **not** retract already-mirrored copies.
 - **Placement.** A carried item lands in a checklist with the **same name and phase** as the
   one it was pinned in. If the new trip has no such checklist, that checklist is **created**.
 - **No duplicates.** Carrying is skipped if an item with the same name already exists in the
@@ -266,6 +272,13 @@ newly-created trip as a fresh, all-unchecked copy.
   starts with the most recent version of the list.
 - **New trip seeding.** Checklists created from a pinned snapshot are themselves marked
   `pinned: true`, so their changes continue to sync the global snapshot going forward.
+- **Immediate push to existing upcoming trips.** The moment a checklist is pinned, its
+  current items are also immediately mirrored into every **other** trip that is currently
+  `active` or `planned` (not `completed`/`cancelled`) — not just trips created afterward.
+  A matching checklist (same name+phase) is created if the trip doesn't have one; items
+  already present there by name are skipped. This one-time push happens only at the moment
+  of pinning — later edits to the pinned checklist are not re-pushed to other trips (only
+  the global snapshot updates, per above).
 - **Unpin.** Selecting "Unpin from future trips" stops future seeding and removes the global
   snapshot. Existing checklists in current/past trips are unaffected.
 - **Rename.** Renaming a pinned checklist migrates the global snapshot to the new name
@@ -368,6 +381,38 @@ record, keyed by store, §11/§15).
   known words; items whose words have no history yet sink to the bottom of the unbought group
   (in their current order), and bought items always stay at the very bottom (§15). The user
   can still drag afterward — which in turn teaches the model.
+
+## 17. Bugs & ideas (Manage)
+
+A shared, sortable to-do list for logging bugs and improvement ideas, reached from
+**Manage → Bugs & ideas**. It is a single global list (a shared `feedback` collection).
+
+- **Entry.** Each entry has a free-text description and a **kind** — `bug` or
+  `improvement` — chosen when adding. Kind and text can be edited afterward. The
+  description is **multi-line** — Enter inserts a new line/paragraph, ⌘/Ctrl+Enter saves —
+  and line breaks are preserved when the entry is displayed and exported.
+- **Single list, filterable.** All entries live in one list. A filter (**All / Bugs /
+  Improvements / Completed**) only hides rows; it never changes the underlying list or
+  ordering. Each row shows its kind as a labelled badge regardless of the active filter.
+  The **All / Bugs / Improvements** filters show only *active* (not-completed) entries; the
+  **Completed** filter shows only completed ones.
+- **Complete & restore.** Marking an entry complete (the check button) sets a `done` flag,
+  which hides it from the working list but keeps it. It reappears under the **Completed**
+  filter, where the (now filled) check button un-completes it — restoring it to the working
+  list — so a mistaken completion can be undone.
+- **Permanent delete.** A completed entry can be removed for good via a trash button (shown
+  only in the Completed view), after a confirmation. Active entries have no delete — the
+  path to removal is complete → (optionally) delete.
+- **Drag-and-drop sorting.** Entries can be reordered by dragging (via a grip handle); the
+  order is remembered globally. Reordering while a filter is active moves the visible rows
+  and leaves the hidden entries in their relative positions.
+- **Export to clipboard.** A copy button exports the **active (not-completed) entries** (in
+  their saved order, ignoring the active filter) to the clipboard as plain text, ready to
+  paste into an AI. Each entry is a running-numbered block prefixed by its kind — e.g.
+  `Bug 1:` then the text on the next line, `Improvement 2:` then its text — separated by a
+  blank line.
+- **Authorship.** Each entry records the identity that created it (`createdBy`) and a
+  creation timestamp.
 
 ---
 

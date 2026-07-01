@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useChecklistItems, useStores } from '@/hooks/useFirestore'
 import {
   updateChecklist, deleteChecklist, setItemPersist, savePinnedChecklist, removePinnedChecklist,
+  pushPinnedChecklistToTrips,
   setChecklistItemChecked, updateChecklistItemAndPropagate, deleteChecklistItemAndPropagate,
   unlinkChecklistItemFromSupermarket,
 } from '@/lib/firestore'
@@ -76,6 +77,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
     } else {
       await updateChecklist(tripId, checklist.id, { pinned: true })
       await savePinnedChecklist(checklist.name, checklist.phase, items, identity)
+      await pushPinnedChecklistToTrips(tripId, checklist.name, checklist.phase, items, identity)
     }
   }
 
