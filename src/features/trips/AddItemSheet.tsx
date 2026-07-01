@@ -1,23 +1,25 @@
 import { useState, useMemo } from 'react'
-import { useCatalog, useStores, useChecklistItems } from '@/hooks/useFirestore'
-import { addItem, ensureCatalogItem } from '@/lib/firestore'
+import { useCatalog, useStores, useChecklistItems, useTrips } from '@/hooks/useFirestore'
+import { addItem, ensureCatalogItem, mirrorGroceryItemToSupermarket } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Sheet } from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Search, Plus } from 'lucide-react'
-import type { CatalogItem } from '@/types'
+import type { CatalogItem, Checklist } from '@/types'
 
 interface Props {
   tripId: string
-  checklistId: string
+  checklist: Checklist
   onClose: () => void
 }
 
-export function AddItemSheet({ tripId, checklistId, onClose }: Props) {
+export function AddItemSheet({ tripId, checklist, onClose }: Props) {
+  const checklistId = checklist.id
   const identity = useAppStore(s => s.identity)!
   const catalog = useCatalog()
   const stores = useStores()
+  const trips = useTrips()
   const existingItems = useChecklistItems(tripId, checklistId)
   const [query, setQuery] = useState('')
   const [saving, setSaving] = useState(false)
@@ -43,7 +45,7 @@ export function AddItemSheet({ tripId, checklistId, onClose }: Props) {
 
   async function addCatalogItem(item: CatalogItem) {
     setSaving(true)
-    await addItem(tripId, checklistId, {
+    const ref = await addItem(tripId, checklistId, {
       catalogItemId: item.id,
       name: item.name,
       qty: '',
@@ -55,6 +57,11 @@ export function AddItemSheet({ tripId, checklistId, onClose }: Props) {
       updatedBy: identity,
       updatedAt: new Date().toISOString(),
     }, identity)
+    // A store-linked grocery checklist also lives in Supermarket (§8) — mirror
+    // this item there when the trip is next/active.
+    await mirrorGroceryItemToSupermarket(
+      tripId, checklist, ref.id, { name: item.name, catalogItemId: item.id, qty: '', checked: false }, trips, identity,
+    )
     setSaving(false)
     setQuery('')
   }
@@ -63,7 +70,7 @@ export function AddItemSheet({ tripId, checklistId, onClose }: Props) {
     const name = query.trim()
     if (!name) return
     setSaving(true)
-    await addItem(tripId, checklistId, {
+    const ref = await addItem(tripId, checklistId, {
       name,
       qty: '',
       checked: false,
@@ -75,6 +82,9 @@ export function AddItemSheet({ tripId, checklistId, onClose }: Props) {
     }, identity)
     // Remember it globally for future autocomplete.
     await ensureCatalogItem(catalog, name, 'camping')
+    await mirrorGroceryItemToSupermarket(
+      tripId, checklist, ref.id, { name, qty: '', checked: false }, trips, identity,
+    )
     setSaving(false)
     setQuery('')
   }

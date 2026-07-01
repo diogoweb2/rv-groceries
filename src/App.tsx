@@ -1,7 +1,10 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthGate } from '@/auth/AuthGate'
-import { backfillCatalogFromItems, dedupeCatalog, syncTripStatuses } from '@/lib/firestore'
+import {
+  backfillCatalogFromItems, dedupeCatalog, syncTripStatuses,
+  ensureDefaultStores, migrateSupermarketListsToStoreIds, migrateGroceryChecklistsToStoreIds,
+} from '@/lib/firestore'
 import { useTrips } from '@/hooks/useFirestore'
 import { useAppStore } from '@/lib/store'
 import { TabLayout } from '@/components/TabLayout'
@@ -35,6 +38,25 @@ function CatalogSync() {
   return null
 }
 
+// Seeds the default stores and links Supermarket lists / trip grocery
+// checklists to Store records, once per device (§11/§15).
+function StoreSync() {
+  useEffect(() => {
+    if (localStorage.getItem('storeSyncV1')) return
+    ;(async () => {
+      try {
+        await ensureDefaultStores()
+        await migrateSupermarketListsToStoreIds()
+        await migrateGroceryChecklistsToStoreIds()
+        localStorage.setItem('storeSyncV1', '1')
+      } catch {
+        /* non-critical — will retry next load */
+      }
+    })()
+  }, [])
+  return null
+}
+
 // Advances trips to their date-derived status (active the day before start,
 // completed the day after end) whenever the trip list changes. Forward-only and
 // idempotent — see syncTripStatuses.
@@ -55,6 +77,7 @@ export default function App() {
     <AuthGate>
       <BrowserRouter>
         <CatalogSync />
+        <StoreSync />
         <TripStatusSync />
         <Suspense fallback={null}>
           <Routes>

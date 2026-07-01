@@ -17,11 +17,12 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useSupermarketLists, useSupermarketItems, useCatalog, useTrips, useSupermarketSort } from '@/hooks/useFirestore'
+import { useSupermarketLists, useSupermarketItems, useCatalog, useTrips, useSupermarketSort, useStores } from '@/hooks/useFirestore'
 import {
-  addSupermarketItem, updateSupermarketItem, deleteSupermarketItem,
-  completeSupermarketList, moveCampingItemToNextTrip, ensureCatalogItem,
-  parseCampingFlag, supermarketStoreLabel, sortedByMemory, learnSupermarketOrder,
+  addSupermarketItem, updateSupermarketItem, deleteSupermarketItemAndPropagate,
+  setSupermarketItemChecked, setSupermarketItemQty, linkSupermarketItemToTrip, unlinkSupermarketItemFromTrip,
+  completeSupermarketList, ensureCatalogItem,
+  parseCampingFlag, storeLabel, sortedByMemory, learnSupermarketOrder,
 } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -40,7 +41,7 @@ function SortableItem({
   onToggle: (item: SupermarketItem) => void
   onToggleCamping: (item: SupermarketItem) => void
   onChangeQty: (item: SupermarketItem, delta: number) => void
-  onDelete: (id: string) => void
+  onDelete: (item: SupermarketItem) => void
 }) {
   const qtyNum = Math.max(1, Number(item.qty) || 1)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
@@ -108,7 +109,7 @@ function SortableItem({
       </button>
 
       <button
-        onClick={() => onDelete(item.id)}
+        onClick={() => onDelete(item)}
         className="text-gray-300 hover:text-red-400 p-1 shrink-0"
         aria-label="Delete item"
       >
@@ -125,6 +126,7 @@ export function SupermarketDetail() {
   const rawItems = useSupermarketItems(id)
   const catalog = useCatalog()
   const trips = useTrips()
+  const stores = useStores()
   const sortMemory = useSupermarketSort()
   const identity = useAppStore(s => s.identity)!
 
@@ -136,6 +138,7 @@ export function SupermarketDetail() {
   useEffect(() => { setItems(rawItems) }, [rawItems])
 
   const list = lists.find(l => l.id === id)
+  const store = stores.find(s => s.id === list?.storeId)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -161,15 +164,11 @@ export function SupermarketDetail() {
         .slice(0, 6)
     : []
 
-  async function moveToRV(item: { name: string; catalogItemId?: string; qty?: string }) {
-    await moveCampingItemToNextTrip(item, trips, identity)
-  }
-
   // Persist the given items in the learned order (§16): re-index every item
   // whose position changed and reflect it locally right away.
   async function applySortedOrder(current: SupermarketItem[]) {
     if (!list) return
-    const sorted = sortedByMemory(current, sortMemory, list.store)
+    const sorted = sortedByMemory(current, sortMemory, list.storeId)
     setItems(sorted)
     for (let i = 0; i < sorted.length; i++) {
       const it = sorted[i]
@@ -185,14 +184,7 @@ export function SupermarketDetail() {
     const match = catalog.find(c => c.name.toLowerCase() === name.toLowerCase())
     const ref = await addSupermarketItem(
       list.id,
-      {
-        catalogItemId: match?.id,
-        name,
-        qty: '1',
-        forCamping: forCamping || undefined,
-        checked: false,
-        order: items.length,
-      },
+      { catalogItemId: match?.id, name, qty: '1', checked: false, order: items.length },
       identity,
     )
     // Register new names so supermarket autocomplete learns them.
@@ -201,10 +193,13 @@ export function SupermarketDetail() {
     // Auto-sort the list by learned order every time an item is added (§16).
     const newItem: SupermarketItem = {
       id: ref.id, listId: list.id, catalogItemId: match?.id, name, qty: '1',
-      forCamping: forCamping || undefined, checked: false, order: items.length,
+      checked: false, order: items.length,
       rev: 1, baseRev: 0, updatedBy: identity, updatedAt: new Date().toISOString(),
     }
     await applySortedOrder([...items, newItem])
+    // "<name> -> camping" shorthand: mirror straight into the next/active
+    // trip's grocery list for this store (§15).
+    if (forCamping && store) await linkSupermarketItemToTrip(list, newItem, store, trips, identity)
   }
 
   // Adjust an item's quantity from its row stepper (min 1). Optimistic locally.
@@ -213,7 +208,7 @@ export function SupermarketDetail() {
     const next = Math.max(1, current + delta)
     if (next === current) return
     setItems(items.map(i => (i.id === item.id ? { ...i, qty: String(next) } : i)))
-    await updateSupermarketItem(list!.id, item.id, { qty: String(next) }, identity, item.rev)
+    await setSupermarketItemQty(list!, item, String(next), identity)
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -232,7 +227,7 @@ export function SupermarketDetail() {
     // Learn this manual ordering so future lists auto-sort to match (§16). Only
     // the deliberately-ordered (unchecked) items teach; bought ones sit at the
     // bottom by the bought-to-end rule, not by choice.
-    await learnSupermarketOrder(list!.store, reordered.filter(i => !i.checked).map(i => i.name), sortMemory)
+    await learnSupermarketOrder(list!.storeId, reordered.filter(i => !i.checked).map(i => i.name), sortMemory)
   }
 
   async function toggleBought(item: SupermarketItem) {
@@ -247,21 +242,23 @@ export function SupermarketDetail() {
         if (it.id === item.id || it.order === i) continue
         await updateSupermarketItem(list!.id, it.id, { order: i }, identity, it.rev)
       }
-      await updateSupermarketItem(list!.id, item.id, { checked: true, order: reordered.length - 1 }, identity, item.rev)
+      // Propagates to the linked trip item (if any), which cascades the
+      // checked → copy-to-RV rule (§8).
+      await setSupermarketItemChecked(list!, item, true, identity, { order: reordered.length - 1 })
     } else {
       setItems(items.map(i => (i.id === item.id ? { ...i, checked: false } : i)))
-      await updateSupermarketItem(list!.id, item.id, { checked: false }, identity, item.rev)
-    }
-    if (nowChecked && item.forCamping) {
-      await moveToRV({ name: item.name, catalogItemId: item.catalogItemId, qty: item.qty })
+      await setSupermarketItemChecked(list!, item, false, identity)
     }
   }
 
+  // Tent icon: mirror this item into (or remove it from) the next/active
+  // trip's grocery list for this store — the item stays live-linked
+  // afterward (§8/§15).
   async function toggleCamping(item: SupermarketItem) {
-    const next = !item.forCamping
-    await updateSupermarketItem(list!.id, item.id, { forCamping: next }, identity, item.rev)
-    if (next && item.checked) {
-      await moveToRV({ name: item.name, catalogItemId: item.catalogItemId, qty: item.qty })
+    if (item.forCamping) {
+      await unlinkSupermarketItemFromTrip(item, identity)
+    } else if (store) {
+      await linkSupermarketItemToTrip(list!, item, store, trips, identity)
     }
   }
 
@@ -273,7 +270,7 @@ export function SupermarketDetail() {
       : `Mark complete with ${missed} item(s) not bought? The other person will be notified what you missed.`
     if (!confirm(msg)) return
     setCompleting(true)
-    await completeSupermarketList(list, items, identity)
+    await completeSupermarketList(list, items, storeLabel(stores, list.storeId), identity)
     setCompleting(false)
     navigate('/supermarket')
   }
@@ -297,7 +294,7 @@ export function SupermarketDetail() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold text-gray-800 truncate">{supermarketStoreLabel(list.store)}</h1>
+            <h1 className="text-lg font-bold text-gray-800 truncate">{storeLabel(stores, list.storeId)}</h1>
             <p className="text-sm text-gray-500">{bought}/{items.length} bought</p>
           </div>
           <Button
@@ -361,7 +358,7 @@ export function SupermarketDetail() {
                 onToggle={toggleBought}
                 onToggleCamping={toggleCamping}
                 onChangeQty={changeQty}
-                onDelete={itemId => deleteSupermarketItem(list.id, itemId)}
+                onDelete={deleteSupermarketItemAndPropagate}
               />
             ))}
           </SortableContext>

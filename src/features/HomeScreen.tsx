@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/lib/store'
 import { useTrips, useChecklists, useChecklistItems } from '@/hooks/useFirestore'
+import { findNextOrActiveTrip } from '@/lib/firestore'
 import { Progress } from '@/components/ui/progress'
 import { Tent, Settings, Users, Plus, ChevronRight, CalendarDays, CheckCircle2, ListChecks } from 'lucide-react'
 import type { Trip, Checklist } from '@/types'
@@ -123,13 +124,7 @@ export function HomeScreen() {
   const identity = useAppStore(s => s.identity)
   const clearIdentity = useAppStore(s => s.clearIdentity)
   const trips = useTrips()
-
-  const today = new Date().toISOString().slice(0, 10)
-  const focusTrip =
-    trips.find(t => t.status === 'active') ??
-    trips
-      .filter(t => t.startDate >= today && t.status !== 'cancelled' && t.status !== 'completed')
-      .sort((a, b) => a.startDate.localeCompare(b.startDate))[0]
+  const focusTrip = findNextOrActiveTrip(trips)
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'

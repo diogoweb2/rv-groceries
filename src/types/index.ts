@@ -6,9 +6,6 @@ export type TripStatus = 'planned' | 'active' | 'completed' | 'cancelled'
 
 export type GroceryListStatus = 'draft' | 'sent'
 
-/** The fixed set of supermarkets a list can be for. */
-export type SupermarketStore = 'nofrills_freshco' | 'dollarama' | 'costco'
-
 /** A supermarket list is `active` until the shopper marks it `complete` (then hidden). */
 export type SupermarketListStatus = 'active' | 'complete'
 
@@ -85,6 +82,11 @@ export interface Checklist {
   order: number
   /** When true, this checklist is pinned and auto-creates on every new trip. */
   pinned?: boolean
+  /**
+   * For `grocery`-phase checklists: the Store (Manage > Stores) this list is
+   * for. Drives the live sync with the matching Supermarket list (§8).
+   */
+  storeId?: string
 }
 
 export interface PinnedChecklistItem {
@@ -124,6 +126,13 @@ export interface ChecklistItem {
   order: number
   /** When true, the item carries over to future trips until it is checked. */
   persist?: boolean
+  /**
+   * When this grocery item is live-linked to a Supermarket item (§8/§15), the
+   * list/item it's paired with. Present only on items in a `grocery`-phase,
+   * store-linked checklist that has been mirrored to/from Supermarket.
+   */
+  linkedSupermarketListId?: string
+  linkedSupermarketItemId?: string
   rev: number
   baseRev: number
   updatedBy: UserIdentity
@@ -171,12 +180,12 @@ export interface GroceryItem {
 }
 
 /**
- * A shopping list for one specific supermarket. Only one active list may exist
- * per store, and at most three active lists total (one per store). See §15.
+ * A shopping list for one specific store (Manage > Stores). Only one active
+ * list may exist per store at a time. See §15.
  */
 export interface SupermarketList {
   id: string
-  store: SupermarketStore
+  storeId: string
   status: SupermarketListStatus
   createdBy: UserIdentity
   createdAt: string
@@ -190,11 +199,19 @@ export interface SupermarketItem {
   catalogItemId?: string
   name: string
   qty?: string
-  /** When true, once bought this item is copied into the next trip's RV list (§15). */
+  /**
+   * When true, this item is live-linked into the next/active trip's Groceries
+   * checklist for this store (§8/§15) — flipping it on mirrors the item into
+   * the trip; flipping it off removes it from the trip.
+   */
   forCamping?: boolean
   /** Whether the shopper has bought this item. */
   checked: boolean
   order: number
+  /** The linked trip-side item, when `forCamping` is set (§8). */
+  linkedTripId?: string
+  linkedChecklistId?: string
+  linkedItemId?: string
   rev: number
   baseRev: number
   updatedBy: UserIdentity
@@ -208,7 +225,7 @@ export interface SupermarketItem {
  * so the most recent manual sort carries the most weight.
  */
 export interface SupermarketSortMemory {
-  stores: Partial<Record<SupermarketStore, Record<string, number>>>
+  stores: Record<string, Record<string, number>>
 }
 
 /**

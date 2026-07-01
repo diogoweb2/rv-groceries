@@ -1,12 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
-import { useChecklistItems } from '@/hooks/useFirestore'
-import { toggleItem, deleteItem, updateChecklist, deleteChecklist, copyItemToChecklist, setItemPersist, addPersistentItem, removePersistentItem, savePinnedChecklist, removePinnedChecklist } from '@/lib/firestore'
+import { useChecklistItems, useStores } from '@/hooks/useFirestore'
+import {
+  updateChecklist, deleteChecklist, setItemPersist, savePinnedChecklist, removePinnedChecklist,
+  setChecklistItemChecked, updateChecklistItemAndPropagate, deleteChecklistItemAndPropagate,
+  unlinkChecklistItemFromSupermarket,
+} from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Progress } from '@/components/ui/progress'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Plus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin } from 'lucide-react'
+import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin } from 'lucide-react'
 import type { Checklist, ChecklistItem } from '@/types'
 
 interface Props {
@@ -22,9 +26,11 @@ interface Props {
 export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dragHandleProps }: Props) {
   const identity = useAppStore(s => s.identity)!
   const items = useChecklistItems(tripId, checklist.id)
+  const stores = useStores()
   const [expanded, setExpanded] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState<string | null>(null)
+  const isGrocery = checklist.phase === 'grocery'
 
   const checked = items.filter(i => i.checked).length
   const total = items.length
@@ -44,29 +50,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
   }, [items, checklist.pinned, checklist.name, checklist.phase, identity])
 
   async function handleToggle(item: ChecklistItem) {
-    const nextChecked = !item.checked
-    await toggleItem(tripId, checklist.id, item.id, nextChecked, identity, item.rev)
-    // A persistent item only recurs while unchecked: drop it from the recurring
-    // set when checked, restore it when unchecked again.
-    if (item.persist) {
-      if (nextChecked) {
-        await removePersistentItem(checklist.phase, checklist.name, item.name)
-      } else {
-        await addPersistentItem(
-          { name: item.name, phase: checklist.phase, checklistName: checklist.name, catalogItemId: item.catalogItemId, qty: item.qty },
-          identity,
-        )
-      }
-    }
-    // When a grocery item is bought, send it to the bring-to-RV list.
-    if (nextChecked && copyToOnCheck) {
-      await copyItemToChecklist(
-        tripId,
-        copyToOnCheck,
-        { name: item.name, catalogItemId: item.catalogItemId, qty: item.qty },
-        identity,
-      )
-    }
+    await setChecklistItemChecked(tripId, checklist, item, !item.checked, identity, copyToOnCheck)
   }
 
   async function handleTogglePersist(item: ChecklistItem) {
@@ -74,8 +58,14 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
   }
 
   async function handleDelete(item: ChecklistItem) {
-    if (item.persist) await removePersistentItem(checklist.phase, checklist.name, item.name)
-    await deleteItem(tripId, checklist.id, item.id)
+    await deleteChecklistItemAndPropagate(tripId, checklist, item)
+  }
+
+  async function handleChangeQty(item: ChecklistItem, delta: number) {
+    const current = Math.max(1, Number(item.qty) || 1)
+    const next = Math.max(1, current + delta)
+    if (next === current) return
+    await updateChecklistItemAndPropagate(tripId, checklist, item, { qty: String(next) }, identity)
   }
 
   async function handleTogglePin() {
@@ -97,6 +87,20 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
       await savePinnedChecklist(newName, checklist.phase, items, identity)
     }
     await updateChecklist(tripId, checklist.id, { name: newName })
+    setRenaming(null)
+  }
+
+  async function handleChangeStore(store: { id: string; name: string }) {
+    if (checklist.pinned) {
+      await removePinnedChecklist(checklist.phase, checklist.name)
+      await savePinnedChecklist(store.name, checklist.phase, items, identity)
+    }
+    await updateChecklist(tripId, checklist.id, { name: store.name, storeId: store.id })
+    // Existing items were linked to the old store's Supermarket list — unlink
+    // them so they don't keep writing to the wrong store (§8).
+    for (const item of items) {
+      if (item.linkedSupermarketListId) await unlinkChecklistItemFromSupermarket(item, identity)
+    }
     setRenaming(null)
   }
 
@@ -157,7 +161,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
                   onClick={() => { setMenuOpen(false); setRenaming(checklist.name) }}
                   className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
                 >
-                  <Pencil className="w-4 h-4" /> Rename
+                  <Pencil className="w-4 h-4" /> {isGrocery ? 'Change store' : 'Rename'}
                 </button>
                 <button
                   onClick={handleDeleteChecklist}
@@ -200,13 +204,35 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
                 <span className={`text-base ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                   {item.name}
                 </span>
-                {item.qty && (
+                {item.qty && !isGrocery && (
                   <span className="text-sm text-gray-500 ml-1">× {item.qty}</span>
                 )}
                 {item.frozenField && (
                   <span className="ml-2 text-xs text-amber-600">⚠ conflict</span>
                 )}
               </div>
+
+              {/* Quantity stepper (grocery items only) */}
+              {isGrocery && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => handleChangeQty(item, -1)}
+                    disabled={Math.max(1, Number(item.qty) || 1) <= 1}
+                    className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-600 disabled:opacity-30 active:bg-gray-100"
+                    aria-label="Decrease quantity"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <span className="w-5 text-center text-sm font-medium text-gray-700">{Math.max(1, Number(item.qty) || 1)}</span>
+                  <button
+                    onClick={() => handleChangeQty(item, 1)}
+                    className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-600 active:bg-gray-100"
+                    aria-label="Increase quantity"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
 
               {/* Persist (carry to future trips until checked) */}
               <button
@@ -239,21 +265,40 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
         </div>
       )}
 
-      {/* Rename dialog */}
-      <Dialog open={renaming !== null} onClose={() => setRenaming(null)} title="Rename checklist">
-        <div className="flex flex-col gap-4">
-          <Input
-            value={renaming ?? ''}
-            onChange={e => setRenaming(e.target.value)}
-            placeholder="Checklist name"
-            autoFocus
-            onKeyDown={e => e.key === 'Enter' && handleRename()}
-          />
-          <div className="flex gap-2">
-            <Button variant="secondary" className="flex-1" onClick={() => setRenaming(null)}>Cancel</Button>
-            <Button className="flex-1" onClick={handleRename} disabled={!renaming?.trim()}>Save</Button>
+      {/* Rename / change-store dialog */}
+      <Dialog open={renaming !== null} onClose={() => setRenaming(null)} title={isGrocery ? 'Change store' : 'Rename checklist'}>
+        {isGrocery ? (
+          <div className="flex flex-col gap-2">
+            {stores.map(s => (
+              <button
+                key={s.id}
+                onClick={() => handleChangeStore(s)}
+                className={`text-left py-2.5 px-3 rounded-xl text-sm font-medium border-2 transition-colors ${
+                  checklist.storeId === s.id ? 'border-[#2f6b4f] bg-[#2f6b4f] text-white' : 'border-gray-200 text-gray-600'
+                }`}
+              >
+                {s.name}
+              </button>
+            ))}
+            {stores.length === 0 && (
+              <p className="text-sm text-gray-500">No stores yet. Add one in Manage → Stores.</p>
+            )}
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <Input
+              value={renaming ?? ''}
+              onChange={e => setRenaming(e.target.value)}
+              placeholder="Checklist name"
+              autoFocus
+              onKeyDown={e => e.key === 'Enter' && handleRename()}
+            />
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={() => setRenaming(null)}>Cancel</Button>
+              <Button className="flex-1" onClick={handleRename} disabled={!renaming?.trim()}>Save</Button>
+            </div>
+          </div>
+        )}
       </Dialog>
     </div>
   )

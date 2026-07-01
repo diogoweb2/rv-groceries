@@ -1,16 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSupermarketLists, useSupermarketItems } from '@/hooks/useFirestore'
-import {
-  addSupermarketList, SUPERMARKET_STORES, supermarketStoreLabel,
-} from '@/lib/firestore'
+import { useSupermarketLists, useSupermarketItems, useStores } from '@/hooks/useFirestore'
+import { addSupermarketList, storeLabel } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Dialog } from '@/components/ui/dialog'
 import { Plus, ShoppingCart, ChevronRight } from 'lucide-react'
-import type { SupermarketList, SupermarketStore } from '@/types'
+import type { SupermarketList, Store } from '@/types'
 
 // One active-list card; subscribes its items to show bought/total progress.
-function ListCard({ list, onOpen }: { list: SupermarketList; onOpen: () => void }) {
+function ListCard({ list, stores, onOpen }: { list: SupermarketList; stores: Store[]; onOpen: () => void }) {
   const items = useSupermarketItems(list.id)
   const bought = items.filter(i => i.checked).length
 
@@ -23,7 +21,7 @@ function ListCard({ list, onOpen }: { list: SupermarketList; onOpen: () => void 
         <ShoppingCart className="w-5 h-5 text-pink-500" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="font-semibold text-gray-800">{supermarketStoreLabel(list.store)}</p>
+        <p className="font-semibold text-gray-800">{storeLabel(stores, list.storeId)}</p>
         <p className="text-sm text-gray-500">
           {items.length === 0 ? 'No items yet' : `${bought}/${items.length} bought`}
         </p>
@@ -36,18 +34,19 @@ function ListCard({ list, onOpen }: { list: SupermarketList; onOpen: () => void 
 export function SupermarketHome() {
   const navigate = useNavigate()
   const lists = useSupermarketLists()
+  const stores = useStores()
   const identity = useAppStore(s => s.identity)!
   const [picking, setPicking] = useState(false)
   const [creating, setCreating] = useState(false)
 
   const active = lists.filter(l => l.status === 'active')
-  const usedStores = new Set(active.map(l => l.store))
-  const availableStores = SUPERMARKET_STORES.filter(s => !usedStores.has(s.id))
+  const usedStoreIds = new Set(active.map(l => l.storeId))
+  const availableStores = stores.filter(s => !usedStoreIds.has(s.id))
   const canCreate = availableStores.length > 0
 
-  async function createList(store: SupermarketStore) {
+  async function createList(storeId: string) {
     setCreating(true)
-    const ref = await addSupermarketList(store, identity)
+    const ref = await addSupermarketList(storeId, identity)
     setCreating(false)
     setPicking(false)
     navigate(`/supermarket/${ref.id}`)
@@ -78,14 +77,14 @@ export function SupermarketHome() {
         ) : (
           <div className="flex flex-col gap-3">
             {active.map(list => (
-              <ListCard key={list.id} list={list} onOpen={() => navigate(`/supermarket/${list.id}`)} />
+              <ListCard key={list.id} list={list} stores={stores} onOpen={() => navigate(`/supermarket/${list.id}`)} />
             ))}
           </div>
         )}
 
         {!canCreate && active.length > 0 && (
           <p className="text-center text-gray-400 text-xs mt-5">
-            All three stores have an active list. Complete one to start another.
+            Every store already has an active list. Complete one to start another.
           </p>
         )}
       </div>
@@ -101,7 +100,7 @@ export function SupermarketHome() {
               className="flex items-center gap-3 border-2 border-gray-200 rounded-xl px-4 py-3.5 text-gray-800 font-semibold hover:border-[#2f6b4f] hover:bg-emerald-50 transition-colors disabled:opacity-50"
             >
               <ShoppingCart className="w-5 h-5 text-pink-500" />
-              {s.label}
+              {s.name}
             </button>
           ))}
         </div>

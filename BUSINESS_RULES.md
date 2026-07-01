@@ -159,11 +159,40 @@ The `itemCatalog` collection is the **single global source** for item autocomple
   date-driven auto-completion does not double-count. These stats drive the suggestion ranking
   and scoring in §6.
 
-## 8. Groceries inside a Trip (auto-move to RV)
+## 8. Groceries inside a Trip (store-linked, synced with Supermarket, auto-move to RV)
 
-- A trip's **Groceries** (`grocery` phase) checklist represents shopping for the trip.
-- **Rule:** when a grocery item is **checked** (i.e. bought), it is automatically **copied**
-  into the trip's **Day of departure** (`pre_dayof`) checklist — the "bring to RV" list.
+- A trip's **Groceries** (`grocery` phase) checklist represents shopping for the trip. Each
+  grocery checklist is for **exactly one Store** (see §11) — picked from a store list, not
+  typed as free text. The checklist's name mirrors the store's name at the time it's created
+  or changed.
+  - **New checklist.** The "New checklist" dialog shows a store picker (instead of a name
+    field) when the Groceries section is selected, offering stores that don't already have a
+    grocery checklist on this trip.
+  - **Change store.** The checklist menu's "Change store" (grocery checklists only, replacing
+    "Rename") re-links the checklist to a different store, updating its name to match.
+  - **Quantity.** Every grocery item has a `+`/`-` quantity stepper on its row (min 1), matching
+    the Supermarket stepper (§15).
+- **Sync with Supermarket (live-linked pair).** A store-linked grocery checklist only syncs
+  while its trip is the **next/active trip** (§4's selection rule: active trip, else soonest
+  upcoming non-cancelled/non-completed trip) — checklists on other trips behave as plain lists.
+  - **Trip → Supermarket.** Adding an item to a synced grocery checklist mirrors it into that
+    store's active Supermarket list (creating the list if none is active), adopting a
+    same-name item there instead of duplicating.
+  - **Supermarket → Trip.** A Supermarket item only appears in the trip's grocery checklist
+    once flagged **for camping** (the tent icon / `-> camping` shorthand, §15). Flagging it
+    mirrors it into the synced trip's checklist for that store (creating the checklist if
+    needed); un-flagging removes the mirrored copy from the trip (the Supermarket item itself
+    stays).
+  - **Once linked**, the two items are the same shopping-list entry: checking/unchecking,
+    quantity changes, and deletion on either side apply to both. (Un-flagging in Supermarket is
+    the one "soft" unlink — it removes the trip copy but keeps the Supermarket item.)
+  - **Sticky to its trip.** A link is fixed to whichever trip was next/active at the moment it
+    was created — it does not retarget if a different trip later becomes next/active.
+  - Deleting a whole checklist or trip does **not** cascade to Supermarket (only per-item
+    add/check/qty/delete actions propagate); any linked Supermarket items are left as-is.
+- **Checked → copy to RV.** When a grocery item is **checked** (bought) — whether directly in
+  the trip, or via its linked Supermarket item — it is automatically **copied** into the trip's
+  **Day of departure** (`pre_dayof`) checklist — the "bring to RV" list.
   - The target is the first `pre_dayof` checklist of that trip. If none exists, nothing happens.
   - The copy is skipped if an item with the same name already exists in the target (idempotent;
     re-checking does not create duplicates).
@@ -200,7 +229,11 @@ The `itemCatalog` collection is the **single global source** for item autocomple
 ## 11. Reference Data (Manage)
 
 - **Amenities** — named tags with an emoji icon (e.g. Beach, Pool). Used to drive stats.
-- **Stores** — named shops; can be set as an item's default store.
+- **Stores** — named shops. This is the **single shared list** of stores used everywhere:
+  as an item's default store, as the picker for trip grocery checklists (§8), and as the
+  list of stores Supermarket (§15) can have a list for. Seeded on first load with **NoFrills /
+  FreshCo**, **Dollarama**, and **Costco**; more can be added, renamed, or removed here, which
+  changes what's available in both Groceries and Supermarket going forward.
 - **Saved items (catalog)** — see §7.
 
 ## 12. Persistent (recurring) items
@@ -273,12 +306,12 @@ A standalone feature (its own bottom-tab **Supermarket**, after Camping; it does
 on Home) for Alice to build shopping lists that Diogo fulfils. Each list targets one specific
 supermarket.
 
-- **Stores.** A list is for exactly one of three fixed stores: **NoFrills / FreshCo**,
-  **Dollarama**, **Costco**.
-- **One list per store, max three.** At most one **active** list may exist per store, so at
-  most three active lists total. Creating a list prompts for the store, offering only stores
-  without an active list. When all three stores have an active list, the **New list** button is
-  hidden.
+- **Stores.** A list is for exactly one store from the shared Stores list (Manage → Stores,
+  §11) — not a fixed set. Seeded with **NoFrills / FreshCo**, **Dollarama**, **Costco**, and
+  grows/shrinks as stores are added or removed in Manage → Stores.
+- **One list per store.** At most one **active** list may exist per store. Creating a list
+  prompts for the store, offering only stores without an active list. When every store already
+  has an active list, the **New list** button is hidden.
 - **Status.** A new list is **active**. The shopper marks items bought (a check), then taps
   **COMPLETE**. Completing sets the status to **complete**, which **hides the list** from the
   Supermarket tab (only active lists are shown). Completion is allowed **whether or not**
@@ -289,14 +322,18 @@ supermarket.
   - If every item was bought: *"<Name> bought everything on the <store> list"*.
   - Otherwise: *"<Name> finished the <store> list. Couldn't get: <missed items>"* (the unbought
     item names).
-- **Camping items.** Any item can be flagged **for camping**, either by a per-item tent toggle
-  or by the shorthand **`<name> -> camping`** (also `→ camping`) when adding — the suffix is
-  stripped and the item is flagged.
-  - When a camping-flagged item is **bought** (checked), it is **copied** into the next trip's
-    **Day of departure** (`pre_dayof`, "move to RV/truck") list. The target trip is the
-    **active** trip, else the **soonest upcoming** non-cancelled/non-completed trip. No-op if
-    there is no eligible trip or it has no `pre_dayof` checklist. The copy is idempotent (skips
-    a same-name item already there). Flagging an already-bought item triggers the same copy.
+- **Camping items (live-linked with trip Groceries, §8).** Any item can be flagged **for
+  camping**, either by a per-item tent toggle or by the shorthand **`<name> -> camping`** (also
+  `→ camping`) when adding — the suffix is stripped and the item is flagged.
+  - Flagging an item **mirrors it** into the next/active trip's Groceries checklist for this
+    store (creating that checklist if the trip doesn't have one yet for this store). No-op if
+    there's no eligible trip (active trip, else soonest upcoming non-cancelled/non-completed
+    one). Un-flagging removes the mirrored copy from the trip but leaves the item in Supermarket.
+  - Once mirrored, the Supermarket item and the trip item are the same entry: checking, quantity
+    changes, and deletion on either side apply to both (§8).
+  - Checking a camping-flagged item bought copies it into the trip's **Day of departure**
+    (`pre_dayof`, "move to RV/truck") list, via the same rule that fires for any checked trip
+    grocery item (§8) — idempotent, skips a same-name item already there.
 - **Autocomplete.** Adding an item suggests **supermarket items only** — catalog entries of
   category `grocery` or `general` (never `camping`) — ranked by grocery usage. New custom names
   are registered to the catalog as `grocery`.
@@ -312,7 +349,7 @@ supermarket.
 
 Supermarket lists learn how the user likes them ordered and auto-sort future lists to
 match. The memory is **global and per store** (a shared `appSettings/supermarketSort`
-record, keyed by the three fixed stores of §15).
+record, keyed by store, §11/§15).
 
 - **Word-based matching.** Item names are compared by **words**, not exact text: two items
   count as the same kind of thing if they share **at least one word**. So *"Yogurt vanilla"*
