@@ -8,6 +8,50 @@ import { Tent, ShoppingCart, Loader2 } from 'lucide-react'
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string
 
+// Obtain this device's push token and persist it mapped to the given identity so
+// a Cloud Function can target the right person. `prompt` requests notification
+// permission (only safe from a user gesture, e.g. picking identity); on plain app
+// load we register silently and only if permission was already granted.
+async function registerPushToken(
+  id: UserIdentity,
+  prompt: boolean,
+  setFcmToken: (t: string) => void,
+) {
+  try {
+    const messaging = await getMessagingInstance()
+    if (!messaging) return
+    let permission = Notification.permission
+    if (permission === 'default' && prompt) permission = await Notification.requestPermission()
+    if (permission !== 'granted') return
+    const { getToken } = await import('firebase/messaging')
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY })
+    if (token) {
+      setFcmToken(token)
+      await saveFcmToken(token, id)
+    }
+  } catch {
+    // notifications are non-critical — silently ignore
+  }
+}
+
+// Show a system notification when a push arrives while the app is foregrounded
+// (FCM only auto-displays notifications when the page is backgrounded).
+async function listenForegroundMessages() {
+  try {
+    const messaging = await getMessagingInstance()
+    if (!messaging) return
+    const { onMessage } = await import('firebase/messaging')
+    const reg = await navigator.serviceWorker?.getRegistration()
+    onMessage(messaging, (payload) => {
+      const { title = 'RV & Groceries', body = '' } = payload.notification ?? {}
+      if (reg) reg.showNotification(title, { body, icon: '/pwa-192x192.png', badge: '/pwa-192x192.png' })
+      else if (Notification.permission === 'granted') new Notification(title, { body })
+    })
+  } catch {
+    // non-critical
+  }
+}
+
 // Shared app password is checked locally, then a Firebase anonymous-equivalent
 // email/pass account is used. The email/pass combo is stored in env vars.
 const FIREBASE_EMAIL = import.meta.env.VITE_APP_EMAIL as string
@@ -25,6 +69,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     if (isAuthenticated && identity) setStep('done')
     else if (isAuthenticated && !identity) setStep('identity')
   }, [isAuthenticated, identity])
+
+  // Re-register the push token on every load for already-onboarded devices (the
+  // token can rotate, and devices that signed in before this feature never saved
+  // one). Also start showing foreground pushes.
+  useEffect(() => {
+    if (!isAuthenticated || !identity) return
+    registerPushToken(identity, false, setFcmToken)
+    listenForegroundMessages()
+  }, [isAuthenticated, identity, setFcmToken])
 
   async function handlePin(e: React.FormEvent) {
     e.preventDefault()
@@ -44,21 +97,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   async function pickIdentity(id: UserIdentity) {
     setIdentity(id)
     setStep('done')
-    try {
-      const messaging = await getMessagingInstance()
-      if (!messaging) return
-      const permission = await Notification.requestPermission()
-      if (permission !== 'granted') return
-      const { getToken } = await import('firebase/messaging')
-      const token = await getToken(messaging, { vapidKey: VAPID_KEY })
-      if (token) {
-        setFcmToken(token)
-        // Persist token→identity so a Cloud Function can target this person's pushes.
-        await saveFcmToken(token, id)
-      }
-    } catch {
-      // notifications not critical — silently ignore
-    }
+    await registerPushToken(id, true, setFcmToken)
   }
 
   if (step === 'done') return <>{children}</>

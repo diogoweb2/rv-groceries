@@ -6,7 +6,7 @@
  * looked up from the `fcmTokens` collection, which the app keeps in sync.
  */
 
-import {setGlobalOptions} from "firebase-functions";
+import {setGlobalOptions, logger} from "firebase-functions";
 import {onDocumentCreated} from "firebase-functions/v2/firestore";
 import {initializeApp} from "firebase-admin/app";
 import {getFirestore} from "firebase-admin/firestore";
@@ -38,6 +38,9 @@ export const onNotificationCreated = onDocumentCreated(
       if (token) docsByToken.set(token, d.ref);
     });
     const tokens = [...docsByToken.keys()];
+    logger.info(`Notification for "${to}": found ${tokens.length} token(s)`, {
+      to, title,
+    });
     if (tokens.length === 0) return;
 
     const res = await getMessaging().sendEachForMulticast({
@@ -45,6 +48,10 @@ export const onNotificationCreated = onDocumentCreated(
       notification: {title, body},
       data: {type: (data.type as string) ?? "general"},
     });
+    logger.info(
+      `Push sent: ${res.successCount} ok, ${res.failureCount} failed`,
+      {errors: res.responses.filter((r) => r.error).map((r) => r.error?.code)},
+    );
 
     // Clean up tokens that are no longer valid so they don't accumulate.
     const stale: Promise<unknown>[] = [];
