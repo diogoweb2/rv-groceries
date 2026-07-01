@@ -308,6 +308,30 @@ supermarket.
 - **Quantity stepper.** Every item is created with quantity 1 and can be adjusted anytime with a
   `+`/`-` stepper on its row (no upper cap, minimum 1).
 
+## 16. Supermarket auto-sort (learned ordering)
+
+Supermarket lists learn how the user likes them ordered and auto-sort future lists to
+match. The memory is **global and per store** (a shared `appSettings/supermarketSort`
+record, keyed by the three fixed stores of §15).
+
+- **Word-based matching.** Item names are compared by **words**, not exact text: two items
+  count as the same kind of thing if they share **at least one word**. So *"Yogurt vanilla"*
+  and *"Yogurt banana"* are treated alike (shared word "yogurt"). Words are lowercased;
+  single characters and pure numbers are ignored.
+- **Learning from a manual sort.** Whenever the user **drag-reorders** a list, that ordering
+  is recorded: each item's words are nudged toward that item's position in the list (top →
+  bottom). Only the deliberately-ordered (unbought) items teach — items already **bought**
+  sit at the bottom by the bought-to-end rule (§15), not by choice, so they do not teach.
+  A list with fewer than two unbought items carries no ordering signal and teaches nothing.
+- **Recency + sharpening.** The memory is an exponential moving average, so the **most recent
+  sort carries the most weight** while older sorts still count; the ordering keeps getting
+  more accurate the more the user re-sorts.
+- **Auto-sort on add.** In an existing list, **every time an item is added** the whole list
+  is re-sorted by the learned order. An item is scored by the average learned position of its
+  known words; items whose words have no history yet sink to the bottom of the unbought group
+  (in their current order), and bought items always stay at the very bottom (§15). The user
+  can still drag afterward — which in turn teaches the model.
+
 ---
 
 ### Glossary of phases

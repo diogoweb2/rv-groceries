@@ -22,7 +22,8 @@ import type {
   Trip, Checklist, ChecklistItem, Amenity, Store, CatalogItem,
   GroceryList, GroceryItem, UserIdentity, OrderingPrefs, ChecklistPhase,
   PersistentItem, TripStatus, PinnedChecklist, Template,
-  SupermarketList, SupermarketItem, SupermarketStore, AppNotification
+  SupermarketList, SupermarketItem, SupermarketStore, SupermarketSortMemory,
+  AppNotification
 } from '@/types'
 
 export const DEFAULT_PHASE_ORDER: ChecklistPhase[] = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
@@ -918,6 +919,97 @@ export async function moveCampingItemToNextTrip(
   if (!dayOf) return
 
   await copyItemToChecklist(target.id, dayOf.id, item, identity)
+}
+
+// ── Supermarket auto-sort (learned ordering) ─────────────────────────────────
+// A per-store, word-based memory of how the user likes their shopping list
+// ordered. Each manual sort teaches the model; new lists auto-sort by it. See
+// §16. The signal is word-based so "Yogurt vanilla" and "Yogurt banana" share
+// the word "yogurt" and are grouped together; the most recent sort weighs most
+// via an exponential moving average that also sharpens the model over time.
+
+const SUPERMARKET_SORT_DOC = doc(db, 'appSettings', 'supermarketSort')
+
+// EMA weight given to the newest sort. 0.5 = the latest sort counts as much as
+// all prior history combined, so ordering adapts quickly yet keeps learning.
+const SORT_LEARN_RATE = 0.5
+
+export function subscribeSupermarketSort(cb: (m: SupermarketSortMemory) => void) {
+  return onSnapshot(SUPERMARKET_SORT_DOC, (snap) => {
+    const d = snap.data()
+    cb({ stores: (d?.stores as SupermarketSortMemory['stores']) ?? {} })
+  })
+}
+
+// Split an item name into lowercased word tokens (accents kept, pure numbers and
+// single characters dropped). Word overlap is what makes two differently-named
+// items count as "the same kind" for sorting — one shared word is enough.
+export function tokenizeItemName(name: string): string[] {
+  return Array.from(
+    new Set(
+      name
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((w) => w.length >= 2 && !/^\d+$/.test(w)),
+    ),
+  )
+}
+
+// The learned position of a name = the mean learned position of its known words.
+// Returns null when none of its words has any history yet (an unknown item).
+function scoreName(name: string, words: Record<string, number>): number | null {
+  const known = tokenizeItemName(name)
+    .map((t) => words[t])
+    .filter((v): v is number => typeof v === 'number')
+  if (known.length === 0) return null
+  return known.reduce((a, b) => a + b, 0) / known.length
+}
+
+// Return the items in the learned display order: unchecked items sorted by their
+// learned score (unknown items sink to the bottom of the unchecked group, in
+// their current relative order); checked ("bought") items always stay at the
+// very bottom in their current relative order (§15 bought-to-end + §16).
+export function sortedByMemory<T extends { name: string; checked: boolean }>(
+  items: T[],
+  memory: SupermarketSortMemory,
+  store: SupermarketStore,
+): T[] {
+  const words = memory.stores[store] ?? {}
+  const checked = items.filter((i) => i.checked)
+  const unchecked = items
+    .filter((i) => !i.checked)
+    .map((it, idx) => ({ it, idx, score: scoreName(it.name, words) }))
+    .sort((a, b) => {
+      if (a.score === null && b.score === null) return a.idx - b.idx
+      if (a.score === null) return 1
+      if (b.score === null) return -1
+      if (a.score !== b.score) return a.score - b.score
+      return a.idx - b.idx
+    })
+  return [...unchecked.map((u) => u.it), ...checked]
+}
+
+// Learn from a deliberately-ordered list: nudge every word of each item toward
+// that item's normalized position (0 = top … 1 = bottom) via an EMA, so recent
+// sorts dominate and the model keeps sharpening (§16). Pass only the items that
+// were actually sorted (exclude bought items, which the bought-to-end rule sank
+// on their own). No-op below two items — a single item carries no order signal.
+export async function learnSupermarketOrder(
+  store: SupermarketStore,
+  orderedNames: string[],
+  memory: SupermarketSortMemory,
+) {
+  if (orderedNames.length < 2) return
+  const words: Record<string, number> = { ...(memory.stores[store] ?? {}) }
+  const n = orderedNames.length
+  orderedNames.forEach((name, i) => {
+    const pos = i / (n - 1)
+    for (const w of tokenizeItemName(name)) {
+      const prev = words[w]
+      words[w] = prev === undefined ? pos : SORT_LEARN_RATE * pos + (1 - SORT_LEARN_RATE) * prev
+    }
+  })
+  await setDoc(SUPERMARKET_SORT_DOC, { stores: { [store]: words } }, { merge: true })
 }
 
 // ── Notifications ────────────────────────────────────────────────────────────

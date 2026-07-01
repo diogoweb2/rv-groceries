@@ -202,6 +202,16 @@ export interface SupermarketItem {
 }
 
 /**
+ * Per-store, word-based learned ordering used to auto-sort supermarket lists
+ * (§16). For each store, a map of lowercased word → learned normalized position
+ * (0 = top of the list … 1 = bottom), updated by an exponential moving average
+ * so the most recent manual sort carries the most weight.
+ */
+export interface SupermarketSortMemory {
+  stores: Partial<Record<SupermarketStore, Record<string, number>>>
+}
+
+/**
  * An in-app / push notification addressed to a single identity. Created by the
  * client (e.g. on supermarket-list completion) and delivered as a real push by
  * a Cloud Function. Rendered as a banner in-app until dismissed.

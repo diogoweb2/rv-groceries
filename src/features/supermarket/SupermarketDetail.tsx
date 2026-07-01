@@ -17,11 +17,11 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useSupermarketLists, useSupermarketItems, useCatalog, useTrips } from '@/hooks/useFirestore'
+import { useSupermarketLists, useSupermarketItems, useCatalog, useTrips, useSupermarketSort } from '@/hooks/useFirestore'
 import {
   addSupermarketItem, updateSupermarketItem, deleteSupermarketItem,
   completeSupermarketList, moveCampingItemToNextTrip, ensureCatalogItem,
-  parseCampingFlag, supermarketStoreLabel,
+  parseCampingFlag, supermarketStoreLabel, sortedByMemory, learnSupermarketOrder,
 } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -125,6 +125,7 @@ export function SupermarketDetail() {
   const rawItems = useSupermarketItems(id)
   const catalog = useCatalog()
   const trips = useTrips()
+  const sortMemory = useSupermarketSort()
   const identity = useAppStore(s => s.identity)!
 
   const [items, setItems] = useState<SupermarketItem[]>([])
@@ -164,11 +165,25 @@ export function SupermarketDetail() {
     await moveCampingItemToNextTrip(item, trips, identity)
   }
 
+  // Persist the given items in the learned order (§16): re-index every item
+  // whose position changed and reflect it locally right away.
+  async function applySortedOrder(current: SupermarketItem[]) {
+    if (!list) return
+    const sorted = sortedByMemory(current, sortMemory, list.store)
+    setItems(sorted)
+    for (let i = 0; i < sorted.length; i++) {
+      const it = sorted[i]
+      if (it.order !== i) {
+        await updateSupermarketItem(list.id, it.id, { order: i }, identity, it.rev)
+      }
+    }
+  }
+
   async function handleAdd(explicitName?: string) {
     const { name, forCamping } = parseCampingFlag((explicitName ?? query).trim())
     if (!name || !list) return
     const match = catalog.find(c => c.name.toLowerCase() === name.toLowerCase())
-    await addSupermarketItem(
+    const ref = await addSupermarketItem(
       list.id,
       {
         catalogItemId: match?.id,
@@ -183,6 +198,13 @@ export function SupermarketDetail() {
     // Register new names so supermarket autocomplete learns them.
     if (!match) await ensureCatalogItem(catalog, name, 'grocery')
     setQuery('')
+    // Auto-sort the list by learned order every time an item is added (§16).
+    const newItem: SupermarketItem = {
+      id: ref.id, listId: list.id, catalogItemId: match?.id, name, qty: '1',
+      forCamping: forCamping || undefined, checked: false, order: items.length,
+      rev: 1, baseRev: 0, updatedBy: identity, updatedAt: new Date().toISOString(),
+    }
+    await applySortedOrder([...items, newItem])
   }
 
   // Adjust an item's quantity from its row stepper (min 1). Optimistic locally.
@@ -207,6 +229,10 @@ export function SupermarketDetail() {
         await updateSupermarketItem(list!.id, item.id, { order: i }, identity, item.rev)
       }
     }
+    // Learn this manual ordering so future lists auto-sort to match (§16). Only
+    // the deliberately-ordered (unchecked) items teach; bought ones sit at the
+    // bottom by the bought-to-end rule, not by choice.
+    await learnSupermarketOrder(list!.store, reordered.filter(i => !i.checked).map(i => i.name), sortMemory)
   }
 
   async function toggleBought(item: SupermarketItem) {
