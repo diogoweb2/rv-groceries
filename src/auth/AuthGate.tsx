@@ -24,7 +24,17 @@ async function registerPushToken(
     if (permission === 'default' && prompt) permission = await Notification.requestPermission()
     if (permission !== 'granted') return
     const { getToken } = await import('firebase/messaging')
-    const token = await getToken(messaging, { vapidKey: VAPID_KEY })
+    // Bind the token to the dedicated messaging service worker explicitly (its
+    // own scope, so it coexists with the Workbox PWA SW at '/'). This guarantees
+    // the push subscription lives on the SW that has the onBackgroundMessage
+    // handler, so background pushes render as native notifications.
+    const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+      scope: '/firebase-cloud-messaging-push-scope',
+    })
+    const token = await getToken(messaging, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: swReg,
+    })
     if (token) {
       setFcmToken(token)
       await saveFcmToken(token, id)

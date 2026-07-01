@@ -18,6 +18,7 @@ setGlobalOptions({maxInstances: 10});
 export const onNotificationCreated = onDocumentCreated(
   "notifications/{id}",
   async (event) => {
+    logger.info(`onNotificationCreated fired for doc ${event.params.id}`);
     const data = event.data?.data();
     if (!data) return;
 
@@ -47,6 +48,18 @@ export const onNotificationCreated = onDocumentCreated(
       tokens,
       notification: {title, body},
       data: {type: (data.type as string) ?? "general"},
+      // Explicit web-push block so Chrome/Android reliably render a native
+      // system notification (not just an in-page message) and tapping it opens
+      // the app.
+      webpush: {
+        notification: {
+          title,
+          body,
+          icon: "/pwa-192x192.png",
+          badge: "/pwa-192x192.png",
+        },
+        fcmOptions: {link: "/"},
+      },
     });
     logger.info(
       `Push sent: ${res.successCount} ok, ${res.failureCount} failed`,
