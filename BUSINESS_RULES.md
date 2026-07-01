@@ -297,6 +297,12 @@ supermarket.
   category `grocery` or `general` (never `camping`) — ranked by grocery usage. New custom names
   are registered to the catalog as `grocery`.
 - **No pinning.** Supermarket items have no persist/pin behaviour.
+- **Drag-and-drop reordering.** Items within a list can be reordered by dragging (via a grip
+  handle), same as trip checklist items.
+- **Bought items move to the end.** Checking an item as bought moves it to the bottom of the
+  list (below all other items); un-checking it leaves it in place rather than moving it back.
+- **Quantity stepper.** Every item is created with quantity 1 and can be adjusted anytime with a
+  `+`/`-` stepper on its row (no upper cap, minimum 1).
 
 ---
 
