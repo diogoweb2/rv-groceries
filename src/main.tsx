@@ -27,6 +27,16 @@ if ('serviceWorker' in navigator) {
     reloading = true
     window.location.reload()
   })
+
+  // Installed PWAs (esp. Android) are resumed from memory rather than
+  // re-navigated, so the browser's automatic SW update check often doesn't
+  // run on open. Explicitly check whenever the app comes to the foreground;
+  // if a new version is found, autoUpdate activates it and the
+  // controllerchange handler above reloads onto it. No-op offline.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !navigator.onLine) return
+    navigator.serviceWorker.getRegistration().then((reg) => reg?.update().catch(() => {}))
+  })
 }
 
 createRoot(document.getElementById('root')!).render(
