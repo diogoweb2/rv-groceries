@@ -21,7 +21,7 @@ function ListCard({ list, stores, onOpen }: { list: SupermarketList; stores: Sto
         <ShoppingCart className="w-5 h-5 text-pink-500" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="font-semibold text-gray-800">{storeLabel(stores, list.storeId)}</p>
+        <p className="font-semibold text-gray-800">{storeLabel(stores, list)}</p>
         <p className="text-sm text-gray-500">
           {items.length === 0 ? 'No items yet' : `${bought}/${items.length} bought`}
         </p>

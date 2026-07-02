@@ -270,7 +270,7 @@ export function SupermarketDetail() {
       : `Mark complete with ${missed} item(s) not bought? The other person will be notified what you missed.`
     if (!confirm(msg)) return
     setCompleting(true)
-    await completeSupermarketList(list, items, storeLabel(stores, list.storeId), identity)
+    await completeSupermarketList(list, items, storeLabel(stores, list), identity)
     setCompleting(false)
     navigate('/supermarket')
   }
@@ -294,7 +294,7 @@ export function SupermarketDetail() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold text-gray-800 truncate">{storeLabel(stores, list.storeId)}</h1>
+            <h1 className="text-lg font-bold text-gray-800 truncate">{storeLabel(stores, list)}</h1>
             <p className="text-sm text-gray-500">{bought}/{items.length} bought</p>
           </div>
           <Button

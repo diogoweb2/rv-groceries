@@ -111,7 +111,19 @@ export async function addStore(data: Omit<Store, 'id'>) {
 }
 
 export async function updateStore(id: string, data: Partial<Store>) {
-  return updateDoc(doc(db, 'stores', id), data)
+  await updateDoc(doc(db, 'stores', id), data)
+  // Keep the name denormalized onto active Supermarket lists (§15) in sync,
+  // so stale/offline clients that rely on it don't show the old name forever.
+  if (data.name) {
+    const snap = await getDocs(
+      query(collection(db, 'supermarketLists'), where('storeId', '==', id), where('status', '==', 'active'))
+    )
+    if (!snap.empty) {
+      const batch = writeBatch(db)
+      snap.docs.forEach((d) => batch.update(d.ref, { storeName: data.name }))
+      await batch.commit()
+    }
+  }
 }
 
 // A store with an active Supermarket list can't be deleted — doing so would
@@ -1190,8 +1202,12 @@ export async function deleteTemplate(id: string) {
 // it and notifies the other person). See §15. Stores come from the shared
 // `stores` collection (Manage > Stores) — see §11.
 
-export function storeLabel(stores: Store[], storeId: string): string {
-  return stores.find((s) => s.id === storeId)?.name ?? 'Unknown store'
+// Display name for a list's store. Prefers the live `stores` join (reflects
+// renames immediately), then the name denormalized onto the list at creation
+// (so a list never renders nameless while `stores` hasn't loaded or if the
+// store was deleted), then a visible placeholder.
+export function storeLabel(stores: Store[], list: Pick<SupermarketList, 'storeId' | 'storeName'>): string {
+  return stores.find((s) => s.id === list.storeId)?.name ?? list.storeName ?? 'Unknown store'
 }
 
 // Recognise the "<name> -> camping" shorthand (also "→ camping", "->camping")
@@ -1210,8 +1226,13 @@ export function subscribeSupermarketLists(cb: (lists: SupermarketList[]) => void
 }
 
 async function createSupermarketListDoc(storeId: string, identity: UserIdentity) {
+  // Denormalize the store name onto the list so it can render without the
+  // `stores` join (see storeLabel). Reads from the offline cache when needed.
+  const storeSnap = await getDoc(doc(db, 'stores', storeId))
+  const storeName = (storeSnap.data()?.name as string | undefined)?.trim()
   return addDoc(collection(db, 'supermarketLists'), clean({
     storeId,
+    storeName,
     status: 'active' as const,
     createdBy: identity,
     createdAt: serverTimestamp(),
@@ -1232,6 +1253,29 @@ export async function ensureActiveSupermarketList(storeId: string, identity: Use
   if (!snap.empty) return snap.docs[0].id
   const ref = await createSupermarketListDoc(storeId, identity)
   return ref.id
+}
+
+// One-time backfill: write `storeName` onto existing supermarketLists docs
+// created before the field existed, so they render a title on clients that
+// can't resolve the `stores` join. Run from the dev console (checklistDevTools).
+export async function backfillSupermarketStoreNames() {
+  const [listsSnap, storesSnap] = await Promise.all([
+    getDocs(collection(db, 'supermarketLists')),
+    getDocs(collection(db, 'stores')),
+  ])
+  const nameById = new Map(storesSnap.docs.map((d) => [d.id, (d.data().name as string) ?? '']))
+  const batch = writeBatch(db)
+  let changed = 0
+  listsSnap.docs.forEach((d) => {
+    const data = d.data()
+    if (data.storeName) return
+    const name = nameById.get(data.storeId)
+    if (!name) return
+    batch.update(d.ref, { storeName: name })
+    changed++
+  })
+  if (changed) await batch.commit()
+  return { updated: changed }
 }
 
 // One-time cleanup for the duplicate-active-list bug (§15): before

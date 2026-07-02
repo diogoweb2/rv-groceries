@@ -327,6 +327,10 @@ supermarket.
   has an active list, the **New list** button is hidden. This is also enforced at write time
   (not just the picker UI): starting a list always checks for an existing active list for that
   store first and reuses it instead of creating a second one.
+- **Store name is denormalized onto the list.** A list stores a copy of its store's name at
+  creation (kept in sync when the store is renamed in Manage → Stores). Display prefers the
+  live store record, then this copy — so a list still shows its store name even if the store
+  was deleted or the stores data hasn't loaded yet.
 - **Stores with an active list can't be deleted.** Deleting a store from Manage → Stores (§11)
   is blocked while it has an active Supermarket list, since removing it would leave that list
   pointing at a store that no longer exists. Complete or otherwise clear the list first.

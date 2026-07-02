@@ -189,6 +189,12 @@ export interface GroceryItem {
 export interface SupermarketList {
   id: string
   storeId: string
+  /**
+   * Denormalized copy of the store's name at creation (kept in sync on store
+   * rename). Display fallback so a list never renders nameless when the
+   * `stores` join is unavailable (stale client, slow load, deleted store).
+   */
+  storeName?: string
   status: SupermarketListStatus
   createdBy: UserIdentity
   createdAt: string
