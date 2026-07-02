@@ -324,7 +324,12 @@ supermarket.
   grows/shrinks as stores are added or removed in Manage → Stores.
 - **One list per store.** At most one **active** list may exist per store. Creating a list
   prompts for the store, offering only stores without an active list. When every store already
-  has an active list, the **New list** button is hidden.
+  has an active list, the **New list** button is hidden. This is also enforced at write time
+  (not just the picker UI): starting a list always checks for an existing active list for that
+  store first and reuses it instead of creating a second one.
+- **Stores with an active list can't be deleted.** Deleting a store from Manage → Stores (§11)
+  is blocked while it has an active Supermarket list, since removing it would leave that list
+  pointing at a store that no longer exists. Complete or otherwise clear the list first.
 - **Status.** A new list is **active**. The shopper marks items bought (a check), then taps
   **COMPLETE**. Completing sets the status to **complete**, which **hides the list** from the
   Supermarket tab (only active lists are shown). Completion is allowed **whether or not**

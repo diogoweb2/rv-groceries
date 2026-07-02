@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSupermarketLists, useSupermarketItems, useStores } from '@/hooks/useFirestore'
-import { addSupermarketList, storeLabel } from '@/lib/firestore'
+import { ensureActiveSupermarketList, storeLabel } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Dialog } from '@/components/ui/dialog'
 import { Plus, ShoppingCart, ChevronRight } from 'lucide-react'
@@ -46,10 +46,10 @@ export function SupermarketHome() {
 
   async function createList(storeId: string) {
     setCreating(true)
-    const ref = await addSupermarketList(storeId, identity)
+    const listId = await ensureActiveSupermarketList(storeId, identity)
     setCreating(false)
     setPicking(false)
-    navigate(`/supermarket/${ref.id}`)
+    navigate(`/supermarket/${listId}`)
   }
 
   return (

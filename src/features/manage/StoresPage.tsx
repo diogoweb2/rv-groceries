@@ -32,7 +32,11 @@ export function StoresPage() {
 
   async function handleDelete(id: string) {
     if (!confirm('Delete this store?')) return
-    await deleteStore(id)
+    try {
+      await deleteStore(id)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not delete this store.')
+    }
   }
 
   return (

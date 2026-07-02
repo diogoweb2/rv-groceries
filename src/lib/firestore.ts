@@ -114,7 +114,13 @@ export async function updateStore(id: string, data: Partial<Store>) {
   return updateDoc(doc(db, 'stores', id), data)
 }
 
+// A store with an active Supermarket list can't be deleted — doing so would
+// orphan the list's storeId and make it render with no store name (§15).
 export async function deleteStore(id: string) {
+  const snap = await getDocs(
+    query(collection(db, 'supermarketLists'), where('storeId', '==', id), where('status', '==', 'active'))
+  )
+  if (!snap.empty) throw new Error('This store has an active Supermarket list. Complete or delete it first.')
   return deleteDoc(doc(db, 'stores', id))
 }
 
@@ -1203,7 +1209,7 @@ export function subscribeSupermarketLists(cb: (lists: SupermarketList[]) => void
   )
 }
 
-export async function addSupermarketList(storeId: string, identity: UserIdentity) {
+async function createSupermarketListDoc(storeId: string, identity: UserIdentity) {
   return addDoc(collection(db, 'supermarketLists'), clean({
     storeId,
     status: 'active' as const,
@@ -1212,16 +1218,76 @@ export async function addSupermarketList(storeId: string, identity: UserIdentity
   }))
 }
 
-// Find the store's current active list, or start a new one. Used to land
-// grocery items mirrored in from a trip (§8) without the user having to
-// create the Supermarket list by hand first.
+// Find the store's current active list, or start a new one. This is the only
+// way a Supermarket list should be created — it re-checks for an existing
+// active list right before writing, so two near-simultaneous "new list" taps
+// (e.g. from two devices) land on the same list instead of creating a
+// duplicate for the store (§15: at most one active list per store). Used by
+// both the store picker (SupermarketHome) and to land grocery items mirrored
+// in from a trip (§8).
 export async function ensureActiveSupermarketList(storeId: string, identity: UserIdentity): Promise<string> {
   const snap = await getDocs(
     query(collection(db, 'supermarketLists'), where('storeId', '==', storeId), where('status', '==', 'active'))
   )
   if (!snap.empty) return snap.docs[0].id
-  const ref = await addSupermarketList(storeId, identity)
+  const ref = await createSupermarketListDoc(storeId, identity)
   return ref.id
+}
+
+// One-time cleanup for the duplicate-active-list bug (§15): before
+// `ensureActiveSupermarketList` was enforced everywhere, a race could create
+// more than one active list for the same store. For each store with more
+// than one active list, keep the oldest, move any items from the others into
+// it (skipping same-name items so nothing doubles up), and delete the
+// duplicate list docs outright — not mark them complete, which would fire a
+// spurious completion notification (§15) for a list nobody actually shopped.
+export async function dedupeSupermarketLists() {
+  const snap = await getDocs(
+    query(collection(db, 'supermarketLists'), where('status', '==', 'active'))
+  )
+  const byStore = new Map<string, { id: string; createdAt: unknown }[]>()
+  snap.docs.forEach((d) => {
+    const data = d.data()
+    const arr = byStore.get(data.storeId) ?? []
+    arr.push({ id: d.id, createdAt: data.createdAt })
+    byStore.set(data.storeId, arr)
+  })
+
+  let mergedLists = 0
+  let movedItems = 0
+
+  for (const [, lists] of byStore) {
+    if (lists.length < 2) continue
+    lists.sort((a, b) => {
+      const at = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0
+      const bt = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0
+      return at - bt
+    })
+    const [keeper, ...dupes] = lists
+
+    const keeperItemsSnap = await getDocs(collection(db, 'supermarketLists', keeper.id, 'items'))
+    const keeperNames = new Set(keeperItemsSnap.docs.map((d) => ((d.data().name as string) ?? '').trim().toLowerCase()))
+
+    for (const dupe of dupes) {
+      const itemsSnap = await getDocs(collection(db, 'supermarketLists', dupe.id, 'items'))
+      const batch = writeBatch(db)
+      itemsSnap.docs.forEach((itemDoc) => {
+        const data = itemDoc.data()
+        const nameKey = ((data.name as string) ?? '').trim().toLowerCase()
+        if (!keeperNames.has(nameKey)) {
+          batch.set(doc(collection(db, 'supermarketLists', keeper.id, 'items')), data)
+          keeperNames.add(nameKey)
+          movedItems++
+        }
+        batch.delete(itemDoc.ref)
+      })
+      batch.delete(doc(db, 'supermarketLists', dupe.id))
+      await batch.commit()
+      mergedLists++
+    }
+  }
+
+  return { mergedLists, movedItems }
 }
 
 export function subscribeSupermarketItems(listId: string, cb: (items: SupermarketItem[]) => void) {
