@@ -11,12 +11,14 @@ per-store shopping lists for Diogo; grocery handling also lives inside camping t
 
 ## 1. Authentication & Identity
 
-- **App PIN gate.** On launch, the user enters a shared app PIN (`VITE_APP_PIN`). It is
-  checked locally on the device — a wrong PIN shows "Wrong password" and does not contact
-  the server.
-- **Shared Firebase account.** A correct PIN signs in with a single shared Firebase
-  email/password account (`VITE_APP_EMAIL` / `VITE_APP_PASSWORD`). These are *not* shown to
-  users; they only ever type the PIN.
+- **App PIN gate.** On launch, the user enters a shared app PIN. It is verified
+  **server-side** by the `exchangePin` Cloud Function (the PIN lives only in the
+  `APP_PIN` function secret — no credentials ship in the client bundle). A wrong PIN
+  shows "Wrong password"; verification requires connectivity.
+- **Brute-force lockout.** After 5 consecutive wrong PINs (globally), sign-in is locked
+  for 15 minutes ("Too many attempts").
+- **Custom-token session.** A correct PIN returns a Firebase custom token; the client
+  signs in with it as the shared `shared-app-user` identity. Users only ever type the PIN.
 - **Identity selection.** After the PIN, the user picks an identity — **Diogo** or **Alice**.
   This is remembered on the device.
 - **Switch identity.** The user can switch identity from the Home header without re-entering

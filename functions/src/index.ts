@@ -8,12 +8,64 @@
 
 import {setGlobalOptions, logger} from "firebase-functions";
 import {onDocumentCreated} from "firebase-functions/v2/firestore";
+import {onCall, HttpsError} from "firebase-functions/v2/https";
+import {defineSecret} from "firebase-functions/params";
 import {initializeApp} from "firebase-admin/app";
-import {getFirestore} from "firebase-admin/firestore";
+import {getFirestore, FieldValue} from "firebase-admin/firestore";
 import {getMessaging} from "firebase-admin/messaging";
+import {getAuth} from "firebase-admin/auth";
 
 initializeApp();
 setGlobalOptions({maxInstances: 10});
+
+const appPin = defineSecret("APP_PIN");
+
+const MAX_FAILURES = 5;
+const LOCKOUT_MS = 15 * 60 * 1000;
+
+/**
+ * Exchanges the shared app PIN for a Firebase custom auth token, so no
+ * credentials ever ship in the client bundle. A global Firestore throttle
+ * locks sign-in for 15 minutes after 5 consecutive wrong PINs.
+ */
+export const exchangePin = onCall({secrets: [appPin]}, async (request) => {
+  const pin = request.data?.pin;
+  if (typeof pin !== "string" || pin.length === 0) {
+    throw new HttpsError("invalid-argument", "PIN is required");
+  }
+
+  const db = getFirestore();
+  const throttleRef = db.collection("internal").doc("authThrottle");
+  const snap = await throttleRef.get();
+  const lockedUntil = snap.data()?.lockedUntil?.toMillis?.() ?? 0;
+  if (Date.now() < lockedUntil) {
+    throw new HttpsError(
+      "resource-exhausted", "Too many attempts — try again later",
+    );
+  }
+
+  if (pin !== appPin.value()) {
+    const failures = ((snap.data()?.failures as number) ?? 0) + 1;
+    await throttleRef.set({
+      failures,
+      ...(failures >= MAX_FAILURES ?
+        {lockedUntil: new Date(Date.now() + LOCKOUT_MS)} :
+        {}),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, {merge: true});
+    logger.warn(`Wrong PIN attempt (${failures}/${MAX_FAILURES})`);
+    throw new HttpsError("permission-denied", "Wrong PIN");
+  }
+
+  if (snap.exists) {
+    await throttleRef.set(
+      {failures: 0, lockedUntil: null, updatedAt: FieldValue.serverTimestamp()},
+      {merge: true},
+    );
+  }
+  const token = await getAuth().createCustomToken("shared-app-user");
+  return {token};
+});
 
 export const onNotificationCreated = onDocumentCreated(
   "notifications/{id}",

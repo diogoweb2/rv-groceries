@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { signInWithEmailAndPassword } from 'firebase/auth'
+import { signInWithCustomToken } from 'firebase/auth'
+import { getFunctions, httpsCallable } from 'firebase/functions'
 import { auth, getMessagingInstance } from '@/lib/firebase'
 import { saveFcmToken } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
@@ -62,11 +63,8 @@ async function listenForegroundMessages() {
   }
 }
 
-// Shared app password is checked locally, then a Firebase anonymous-equivalent
-// email/pass account is used. The email/pass combo is stored in env vars.
-const FIREBASE_EMAIL = import.meta.env.VITE_APP_EMAIL as string
-const FIREBASE_PASSWORD = import.meta.env.VITE_APP_PASSWORD as string
-const APP_PIN = import.meta.env.VITE_APP_PIN as string
+// The PIN is verified server-side by the `exchangePin` Cloud Function, which
+// returns a Firebase custom token — no credentials ever ship in the bundle.
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, identity, setAuthenticated, setIdentity, setFcmToken } = useAppStore()
@@ -91,14 +89,21 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   async function handlePin(e: React.FormEvent) {
     e.preventDefault()
-    if (pin !== APP_PIN) { setError('Wrong password'); return }
     setLoading(true)
     try {
-      await signInWithEmailAndPassword(auth, FIREBASE_EMAIL, FIREBASE_PASSWORD)
+      const exchangePin = httpsCallable<{ pin: string }, { token: string }>(
+        getFunctions(auth.app),
+        'exchangePin',
+      )
+      const { data } = await exchangePin({ pin })
+      await signInWithCustomToken(auth, data.token)
       setAuthenticated(true)
       setStep('identity')
-    } catch {
-      setError('Connection error — try again')
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code
+      if (code === 'functions/permission-denied') setError('Wrong password')
+      else if (code === 'functions/resource-exhausted') setError('Too many attempts — try again in 15 minutes')
+      else setError('Connection error — try again')
     } finally {
       setLoading(false)
     }
