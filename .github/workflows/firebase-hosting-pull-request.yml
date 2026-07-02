@@ -17,6 +17,9 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - run: printf '%s' "$ENV_FILE" > .env.production
+        env:
+          ENV_FILE: ${{ secrets.ENV_PRODUCTION }}
       - run: npm ci && npm run build
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
