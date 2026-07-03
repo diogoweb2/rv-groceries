@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useChecklistItems, useStores } from '@/hooks/useFirestore'
 import {
-  updateChecklist, deleteChecklist, setItemPersist, savePinnedChecklist, removePinnedChecklist,
+  updateChecklist, deleteChecklist, setItemPersist, setItemBringBack, savePinnedChecklist, removePinnedChecklist,
   pushPinnedChecklistToTrips,
   setChecklistItemChecked, updateChecklistItemAndPropagate, deleteChecklistItemAndPropagate,
   unlinkChecklistItemFromSupermarket,
@@ -11,7 +11,7 @@ import { Progress } from '@/components/ui/progress'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin } from 'lucide-react'
+import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin, Undo2, EyeOff, Eye } from 'lucide-react'
 import type { Checklist, ChecklistItem } from '@/types'
 
 interface Props {
@@ -50,12 +50,39 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
     savePinnedChecklist(checklist.name, checklist.phase, items, identity)
   }, [items, checklist.pinned, checklist.name, checklist.phase, identity])
 
+  // Ask to hide a checklist the moment it becomes 100% complete (§5). Skip the
+  // first meaningful load so an already-complete list on open doesn't prompt.
+  const completeRef = useRef<boolean | null>(null)
+  useEffect(() => {
+    if (total === 0) return
+    const isComplete = checked === total
+    if (completeRef.current === null) {
+      completeRef.current = isComplete
+      return
+    }
+    if (isComplete && !completeRef.current && !checklist.hidden) {
+      if (confirm(`"${checklist.name}" is all done — hide it for this trip?`)) {
+        updateChecklist(tripId, checklist.id, { hidden: true })
+      }
+    }
+    completeRef.current = isComplete
+  }, [checked, total, checklist.hidden, checklist.name, checklist.id, tripId])
+
+  async function handleToggleHidden() {
+    setMenuOpen(false)
+    await updateChecklist(tripId, checklist.id, { hidden: !checklist.hidden })
+  }
+
   async function handleToggle(item: ChecklistItem) {
     await setChecklistItemChecked(tripId, checklist, item, !item.checked, identity, copyToOnCheck)
   }
 
   async function handleTogglePersist(item: ChecklistItem) {
     await setItemPersist(tripId, checklist, item, !item.persist, identity)
+  }
+
+  async function handleToggleBringBack(item: ChecklistItem) {
+    await setItemBringBack(tripId, checklist, item, !item.bringBack, identity)
   }
 
   async function handleDelete(item: ChecklistItem) {
@@ -116,7 +143,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
+    <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 ${checklist.hidden ? 'opacity-60' : ''}`}>
       {/* Card header */}
       <div className="flex items-start gap-2 px-4 pt-4 pb-3">
         {dragHandleProps && (
@@ -134,6 +161,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
         >
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <span className="font-semibold text-gray-800 truncate">{checklist.name}</span>
+              {checklist.hidden && <span className="text-[10px] font-medium uppercase tracking-wide bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded shrink-0">Hidden</span>}
               {checklist.pinned && <Pin className="w-3.5 h-3.5 text-[#2f6b4f] fill-current shrink-0" />}
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-sm text-gray-500">{checked}/{total}</span>
@@ -164,6 +192,12 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
                   className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
                 >
                   <Pencil className="w-4 h-4" /> {isGrocery ? 'Change store' : 'Rename'}
+                </button>
+                <button
+                  onClick={handleToggleHidden}
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  {checklist.hidden ? <><Eye className="w-4 h-4" /> Unhide</> : <><EyeOff className="w-4 h-4" /> Hide for this trip</>}
                 </button>
                 <button
                   onClick={handleDeleteChecklist}
@@ -241,17 +275,29 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
                 onClick={() => handleTogglePersist(item)}
                 aria-label={item.persist ? 'Stop carrying to future trips' : 'Carry to future trips'}
                 aria-pressed={!!item.persist}
-                className={`p-1 ${item.persist ? 'text-[#2f6b4f]' : 'text-gray-300 hover:text-gray-500'}`}
+                className={`p-2.5 -m-1 ${item.persist ? 'text-[#2f6b4f]' : 'text-gray-300 hover:text-gray-500'}`}
               >
-                <Pin className={`w-4 h-4 ${item.persist ? 'fill-current' : ''}`} />
+                <Pin className={`w-5 h-5 ${item.persist ? 'fill-current' : ''}`} />
               </button>
+
+              {/* Bring it back (copy to Pack down / return when checked, §18) */}
+              {checklist.phase !== 'pack_down' && (
+                <button
+                  onClick={() => handleToggleBringBack(item)}
+                  aria-label={item.bringBack ? "Don't bring it back" : 'Bring it back to the Pack down list when checked'}
+                  aria-pressed={!!item.bringBack}
+                  className={`p-2.5 -m-1 ${item.bringBack ? 'text-[#2f6b4f]' : 'text-gray-300 hover:text-gray-500'}`}
+                >
+                  <Undo2 className="w-5 h-5" />
+                </button>
+              )}
 
               {/* Delete */}
               <button
                 onClick={() => handleDelete(item)}
-                className="text-gray-300 hover:text-red-400 p-1"
+                className="text-gray-300 hover:text-red-400 p-2.5 -m-1"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-5 h-5" />
               </button>
             </div>
           ))}

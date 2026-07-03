@@ -110,12 +110,33 @@ The Home screen focuses on a single trip, chosen in this priority:
 - Checklists are grouped into phase **sections** and displayed in the **remembered phase
   order** (see below). A checklist's `order` is its **position within its phase** (0-based);
   newly added checklists append to the end of their phase.
-- Checklists can be **added** to an existing trip as a blank checklist (name + phase).
-  Each phase section shows an **"Add checklist" shortcut** that opens the dialog with that
-  section's phase pre-selected. A global **"Add checklist"** button at the bottom also opens
-  the blank-checklist dialog.
+- Checklists can be **added** to an existing trip as a blank checklist (name + phase). A
+  single **"+ Add checklist"** link in the trip header (next to the amenities **Edit** link)
+  opens a dialog that asks **where** the checklist goes — a Section (phase) picker — plus a
+  name (or a Store picker for the Groceries section, §8). There is no per-section or bottom
+  add button.
+- **"+ Add item" header shortcut.** Alongside "+ Add checklist" the header has a **"+ Add
+  item"** link. It opens a picker of the trip's (visible) checklists grouped by phase; choosing
+  one closes the picker, **smooth-scrolls that checklist into view**, and **opens that list's
+  Add-item sheet** (exactly as tapping the list's own "+ Add item" row would). It is disabled
+  when the trip has no visible checklists.
+- **Phase-section icons.** Each phase section header shows an icon beside its name: Before the
+  trip (backpack), Day of departure (truck), Pack down / return (open package), Groceries
+  (shopping cart).
 - Checklists can be **renamed** and **deleted**. Deleting a checklist removes all its items
   first (no orphans) and requires confirmation.
+- **Hide a checklist for this trip.** Each checklist's menu has **"Hide for this trip"**
+  (**"Unhide"** when hidden). Hiding means "I'm not doing anything about this list on this
+  trip" — it works even if the list still has unchecked items. A hidden checklist is collapsed
+  out of the trip view. Hiding is **per-trip** (a `hidden` flag on the checklist); it is not
+  carried to future trips.
+  - **Show hidden toggle.** When the trip has any hidden checklists, a **"Show hidden (N)"**
+    toggle link appears in the header (next to "+ Add checklist"). Toggling it reveals the
+    hidden checklists (dimmed, with a **Hidden** badge) so they can be unhidden; toggling again
+    re-collapses them.
+  - **Auto-hide prompt on completion.** The moment a checklist becomes **100% complete** (its
+    last item is checked), the user is asked whether to hide it for this trip. Declining leaves
+    it visible. A list that is already complete when the trip is opened does not re-prompt.
 - **Drag-and-drop reordering.** From a trip, the user can drag (via a grip handle):
   - **Phase sections** (Before the trip, Day of departure, Pack down / return, Groceries) to
     change the order the sections appear in.
@@ -424,6 +445,33 @@ A shared, sortable to-do list for logging bugs and improvement ideas, reached fr
   blank line.
 - **Authorship.** Each entry records the identity that created it (`createdBy`) and a
   creation timestamp.
+
+## 18. "Bring it back" items (auto-copy to Pack down / return)
+
+Any checklist item (outside the Pack down / return phase) can be flagged **"bring it
+back"** via a per-item toggle (a return/undo icon on the item row, next to the persist
+pin). It is a reminder to make sure something you took on the trip comes home again.
+
+- **Copy on check.** When a "bring it back" item is **checked off**, it is automatically
+  **copied** into the trip's **Pack down / return** (`pack_down`) checklist — so it shows up
+  (unchecked) as something to account for when packing down. Checking it means "I've got the
+  wallet" in the origin list; the copy in Pack down is the "did it come back?" reminder.
+- **Target list, created if missing.** The copy lands in the trip's first `pack_down`
+  checklist. If the trip has **no** Pack down checklist, one named **"Bring back"** is created.
+- **Copy, not move.** The item stays (checked) in its origin list and appears (unchecked) in
+  Pack down.
+- **Un-check removes the copy.** Un-checking the origin item removes the matching (same-name)
+  entry from the trip's Pack down / return checklist(s), so a mistaken check is fully undone.
+- **No duplicates.** The copy is skipped if an item with the same name already exists in the
+  Pack down checklist (idempotent; re-checking never duplicates).
+- **Scope.** The flag is a per-item property (`bringBack`); it does not carry to future trips
+  and is independent of the persist pin (§12). The toggle is hidden on items that already
+  live in a `pack_down` checklist (nothing to copy them into).
+- **Set at add time (2-step flow).** Adding an item in the Add-item sheet is a two-step flow:
+  after the user creates or picks an item, a follow-up screen offers three choices for that item —
+  **Bring every trip** (sets the persist flag, §12), **Bring back** (sets `bringBack`), or
+  **SKIP** (no flag). Choosing any of the three returns to the search field for the next item.
+  The **Bring back** option is hidden when adding into a `pack_down` checklist.
 
 ---
 

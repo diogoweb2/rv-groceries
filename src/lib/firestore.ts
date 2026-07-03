@@ -614,6 +614,46 @@ async function copyGroceryItemToRv(
   if (dayOf) await copyItemToChecklist(tripId, dayOf.id, item, identity)
 }
 
+// Find a trip's first "Pack down / return" (pack_down) checklist, creating one
+// named "Bring back" if the trip has none. Used by the "bring it back" rule
+// (§18) so a checked item always has somewhere to land.
+async function findOrCreatePackDownChecklist(tripId: string): Promise<string> {
+  const snap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
+  const existing = snap.docs
+    .filter((d) => (d.data().phase as ChecklistPhase) === 'pack_down')
+    .sort((a, b) => ((a.data().order as number) ?? 0) - ((b.data().order as number) ?? 0))[0]
+  if (existing) return existing.id
+  const order = snap.docs.filter((d) => d.data().phase === 'pack_down').length
+  const ref = await addDoc(collection(db, 'trips', tripId, 'checklists'), {
+    tripId,
+    name: 'Bring back',
+    phase: 'pack_down' as const,
+    order,
+  })
+  return ref.id
+}
+
+// Remove any same-name item from every Pack down / return (pack_down) checklist
+// of a trip — undoes the "bring it back" copy when the origin item is
+// un-checked (§18).
+async function removeItemFromPackDown(tripId: string, name: string) {
+  const checklistsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
+  const packDown = checklistsSnap.docs.filter((d) => (d.data().phase as ChecklistPhase) === 'pack_down')
+  const target = name.toLowerCase()
+  const batch = writeBatch(db)
+  let found = false
+  for (const cl of packDown) {
+    const itemsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists', cl.id, 'items'))
+    for (const d of itemsSnap.docs) {
+      if (((d.data().name as string) ?? '').toLowerCase() === target) {
+        batch.delete(d.ref)
+        found = true
+      }
+    }
+  }
+  if (found) await batch.commit()
+}
+
 export async function updateChecklist(tripId: string, checklistId: string, data: Partial<Checklist>) {
   return updateDoc(doc(db, 'trips', tripId, 'checklists', checklistId), clean(data))
 }
@@ -745,6 +785,19 @@ export async function setChecklistItemChecked(
   if (checked && checklist.phase === 'grocery') {
     if (dayOfChecklistId) await copyItemToChecklist(tripId, dayOfChecklistId, item, identity)
     else await copyGroceryItemToRv(tripId, item, identity)
+  }
+
+  // "Bring it back" rule (§18): checking off a flagged item copies it into the
+  // trip's Pack down / return list (created if missing); un-checking removes
+  // that copy again. Skip when the item already lives in a pack_down checklist
+  // so it never copies onto itself.
+  if (item.bringBack && checklist.phase !== 'pack_down') {
+    if (checked) {
+      const packDownId = await findOrCreatePackDownChecklist(tripId)
+      await copyItemToChecklist(tripId, packDownId, item, identity)
+    } else {
+      await removeItemFromPackDown(tripId, item.name)
+    }
   }
 
   if (item.linkedSupermarketListId && item.linkedSupermarketItemId) {
@@ -931,6 +984,19 @@ export async function setItemPersist(
   } else if (!persist) {
     await removePersistentItem(checklist.phase, checklist.name, item.name)
   }
+}
+
+// Toggle the "bring it back" flag on an item (§18). When set, checking the item
+// off later copies it into the trip's Pack down / return list; see
+// setChecklistItemChecked.
+export async function setItemBringBack(
+  tripId: string,
+  checklist: Checklist,
+  item: ChecklistItem,
+  bringBack: boolean,
+  identity: UserIdentity,
+) {
+  await updateItem(tripId, checklist.id, item.id, { bringBack }, identity, item.rev)
 }
 
 // ── Create trip from pinned checklists ─────────────────────────────────────────

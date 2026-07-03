@@ -86,6 +86,12 @@ export interface Checklist {
   /** When true, this checklist is pinned and auto-creates on every new trip. */
   pinned?: boolean
   /**
+   * When true, this checklist is hidden for this trip — the user has decided to
+   * do nothing about it on this trip. Hidden lists are collapsed out of the trip
+   * view unless "Show hidden" is toggled on (§5). Per-trip only (not carried).
+   */
+  hidden?: boolean
+  /**
    * For `grocery`-phase checklists: the Store (Manage > Stores) this list is
    * for. Drives the live sync with the matching Supermarket list (§8).
    */
@@ -129,6 +135,11 @@ export interface ChecklistItem {
   order: number
   /** When true, the item carries over to future trips until it is checked. */
   persist?: boolean
+  /**
+   * When true, checking this item off copies it into the trip's "Pack down /
+   * return" checklist — the "bring it back" rule (§18). Created if none exists.
+   */
+  bringBack?: boolean
   /**
    * When this grocery item is live-linked to a Supermarket item (§8/§15), the
    * list/item it's paired with. Present only on items in a `grocery`-phase,

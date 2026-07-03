@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog } from '@/components/ui/dialog'
-import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, Plus, Check, Tag, GripVertical, Pencil, MapPin, Star } from 'lucide-react'
+import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, Plus, Check, Tag, GripVertical, Pencil, MapPin, Star, Eye, Backpack, Truck, PackageOpen, ShoppingCart, type LucideIcon } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -32,6 +32,13 @@ const PHASE_LABELS: Record<string, string> = {
   pre_dayof: 'Day of departure',
   pack_down: 'Pack down / return',
   grocery: 'Groceries',
+}
+
+const PHASE_ICONS: Record<string, LucideIcon> = {
+  pre_early: Backpack,
+  pre_dayof: Truck,
+  pack_down: PackageOpen,
+  grocery: ShoppingCart,
 }
 
 const STATUS_BADGE: Record<Trip['status'], { label: string; variant: 'default' | 'success' | 'warning' | 'info' }> = {
@@ -92,6 +99,7 @@ function SortableSection({ phase, label, children }: { phase: ChecklistPhase; la
     opacity: isDragging ? 0.6 : 1,
     zIndex: isDragging ? 20 : undefined,
   }
+  const Icon = PHASE_ICONS[phase]
   return (
     <div ref={setNodeRef} style={style}>
       <h2 className="flex items-center gap-1 text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1">
@@ -103,6 +111,7 @@ function SortableSection({ phase, label, children }: { phase: ChecklistPhase; la
         >
           <GripVertical className="w-4 h-4" />
         </button>
+        {Icon && <Icon className="w-4 h-4 text-gray-400 shrink-0" />}
         {label}
       </h2>
       {children}
@@ -125,7 +134,7 @@ function SortableChecklist({ checklist, tripId, onAddItem, copyToOnCheck }: {
     zIndex: isDragging ? 10 : undefined,
   }
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} id={`checklist-${checklist.id}`} className="scroll-mt-4">
       <ChecklistCard
         checklist={checklist}
         tripId={tripId}
@@ -159,6 +168,8 @@ export function TripDetail() {
   const [editTitle, setEditTitle] = useState<string | null>(null)
   const [ratingOpen, setRatingOpen] = useState(false)
   const [pendingRating, setPendingRating] = useState(0)
+  const [showHidden, setShowHidden] = useState(false)
+  const [pickingList, setPickingList] = useState(false)
 
   // Bought groceries get copied into the "Day of departure" checklist (bring to RV).
   const bringToRvId = checklists.find(c => c.phase === 'pre_dayof')?.id
@@ -200,8 +211,8 @@ export function TripDetail() {
     await addChecklist(id!, {
       name: newChecklist.name.trim(),
       phase: newChecklist.phase,
-      // Append at the end of its phase.
-      order: byPhase[newChecklist.phase]?.length ?? 0,
+      // Append at the end of its phase (count all, including hidden).
+      order: checklists.filter(c => c.phase === newChecklist.phase).length,
       storeId: newChecklist.phase === 'grocery' ? newChecklist.storeId : undefined,
     })
     setSavingChecklist(false)
@@ -254,6 +265,17 @@ export function TripDetail() {
     setRatingOpen(false)
   }
 
+  // "+ Add Item" from the header: pick a checklist, then scroll to it so its own
+  // "+ Add item" row is in view for that specific list.
+  function handlePickListToAddItem(checklistId: string) {
+    setPickingList(false)
+    requestAnimationFrame(() => {
+      document.getElementById(`checklist-${checklistId}`)?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    })
+    // Open that list's Add-item sheet, as if its own "+ Add item" was tapped.
+    setAddingTo(checklistId)
+  }
+
   function openRatingDialog() {
     setPendingRating(currentTrip.ratings?.[identity] ?? 0)
     setRatingOpen(true)
@@ -263,8 +285,13 @@ export function TripDetail() {
     setRatingOpen(false)
   }
 
+  const hiddenCount = checklists.filter(c => c.hidden).length
+
+  // Hidden checklists collapse out of the view unless "Show hidden" is on (§5).
+  const visibleChecklists = showHidden ? checklists : checklists.filter(c => !c.hidden)
+
   // Group checklists by phase (each group already sorted by `order`).
-  const byPhase = checklists.reduce<Record<string, typeof checklists>>((acc, cl) => {
+  const byPhase = visibleChecklists.reduce<Record<string, typeof checklists>>((acc, cl) => {
     if (!acc[cl.phase]) acc[cl.phase] = []
     acc[cl.phase].push(cl)
     return acc
@@ -359,6 +386,29 @@ export function TripDetail() {
           )}
           <span className="text-xs text-[#2f6b4f] font-medium ml-1">Edit</span>
         </button>
+        <div className="flex items-center gap-4 px-5 pb-3">
+          <button
+            onClick={() => setPickingList(true)}
+            disabled={visibleChecklists.length === 0}
+            className="flex items-center gap-1 text-sm font-medium text-[#2f6b4f] hover:underline disabled:opacity-40 disabled:hover:no-underline"
+          >
+            <Plus className="w-4 h-4" /> Add item
+          </button>
+          <button
+            onClick={() => setNewChecklist({ name: '', phase: 'pre_early' })}
+            className="flex items-center gap-1 text-sm font-medium text-[#2f6b4f] hover:underline"
+          >
+            <Plus className="w-4 h-4" /> Add checklist
+          </button>
+          {hiddenCount > 0 && (
+            <button
+              onClick={() => setShowHidden(v => !v)}
+              className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:underline"
+            >
+              <Eye className="w-4 h-4" /> {showHidden ? `Hide hidden (${hiddenCount})` : `Show hidden (${hiddenCount})`}
+            </button>
+          )}
+        </div>
         {(trip.ratings?.diogo !== undefined || trip.ratings?.alice !== undefined) && (
           <div className="flex items-center gap-2 px-5 pb-3 text-xs text-gray-500">
             <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" />
@@ -413,13 +463,6 @@ export function TripDetail() {
                         </div>
                       </SortableContext>
                     </DndContext>
-                    {/* Per-section shortcut: add a blank checklist straight into this phase. */}
-                    <button
-                      onClick={() => setNewChecklist({ name: '', phase: phase as ChecklistPhase })}
-                      className="flex items-center gap-1.5 mt-2 px-1 text-sm font-medium text-[#2f6b4f] hover:underline"
-                    >
-                      <Plus className="w-4 h-4" /> Add checklist
-                    </button>
                   </SortableSection>
                 )
               })}
@@ -430,18 +473,14 @@ export function TripDetail() {
         {checklists.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-gray-400">
             <p className="text-base font-medium">No checklists yet</p>
-            <p className="text-sm">Add one below to get started</p>
+            <button
+              onClick={() => setNewChecklist({ name: '', phase: 'pre_early' })}
+              className="mt-3 flex items-center gap-2 text-sm font-medium text-[#2f6b4f]"
+            >
+              <Plus className="w-4 h-4" /> Add a checklist
+            </button>
           </div>
         )}
-
-        {/* Add checklist */}
-        <button
-          onClick={() => setNewChecklist({ name: '', phase: 'pre_early' })}
-          className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl border-2 border-dashed border-gray-200 text-[#2f6b4f] font-medium hover:bg-emerald-50 transition-colors"
-        >
-          <Plus className="w-5 h-5" />
-          Add checklist
-        </button>
       </div>
 
       {/* Add Item Sheet */}
@@ -519,6 +558,31 @@ export function TripDetail() {
             <Button variant="secondary" className="flex-1" onClick={handleRatingDismiss}>Skip</Button>
             <Button className="flex-1" onClick={handleRatingSubmit} disabled={!pendingRating}>Save</Button>
           </div>
+        </div>
+      </Dialog>
+
+      {/* Pick a checklist to add an item to */}
+      <Dialog open={pickingList} onClose={() => setPickingList(false)} title="Add item to…">
+        <div className="flex flex-col gap-4">
+          {visiblePhases.map(phase => (
+            <div key={phase}>
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                {(() => { const Icon = PHASE_ICONS[phase]; return Icon ? <Icon className="w-3.5 h-3.5" /> : null })()}
+                {PHASE_LABELS[phase] ?? phase}
+              </p>
+              <div className="flex flex-col gap-2">
+                {byPhase[phase].map(cl => (
+                  <button
+                    key={cl.id}
+                    onClick={() => handlePickListToAddItem(cl.id)}
+                    className="text-left py-2.5 px-3 rounded-xl text-sm font-medium border-2 border-gray-200 text-gray-700 hover:border-[#2f6b4f] transition-colors"
+                  >
+                    {cl.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </Dialog>
 
