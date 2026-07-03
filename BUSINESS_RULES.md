@@ -504,6 +504,9 @@ Lists can be printed to paper as a hand-check sheet.
 - **Hand-check boxes.** Each printed item has an empty checkbox to tick off by hand.
 - **No icons/controls.** The printout shows item names only (plus quantity where meaningful) —
   none of the app's icons, buttons, or per-item controls.
+- **Paper-saving layout.** Sections flow into multiple balanced columns (2 columns, or 3 when
+  there are more than 24 outstanding items) with compact spacing, so a printout tries to fit on
+  a single page and waste as little paper as possible.
 - Printing renders into a hidden document and opens the browser's native print dialog; it
   never changes any data.
 

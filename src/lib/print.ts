@@ -37,6 +37,10 @@ export function printLists(title: string, lists: PrintList[]) {
     </section>
   `).join('')
 
+  // Total item count drives how aggressively we pack columns so everything
+  // tries to fit on a single page while wasting as little paper as possible.
+  const total = nonEmpty.reduce((n, l) => n + l.items.length, 0)
+
   const html = `<!doctype html>
 <html>
 <head>
@@ -44,20 +48,23 @@ export function printLists(title: string, lists: PrintList[]) {
 <title>${escapeHtml(title)}</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #111; margin: 24px; }
-  h1 { font-size: 22px; margin: 0 0 16px; }
-  section { margin: 0 0 20px; break-inside: avoid; }
-  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.04em; color: #444; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin: 0 0 8px; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #111; margin: 16px; }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  /* Flow sections into balanced columns to save paper. The column count and
+     spacing scale with how many items there are. */
+  .cols { column-count: ${total > 24 ? 3 : 2}; column-gap: 24px; column-fill: balance; }
+  section { margin: 0 0 14px; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid; display: inline-block; width: 100%; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: #444; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin: 0 0 6px; }
   ul { list-style: none; padding: 0; margin: 0; }
-  li { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 15px; break-inside: avoid; }
-  .box { display: inline-block; width: 16px; height: 16px; border: 1.5px solid #333; border-radius: 3px; flex: 0 0 auto; }
-  .txt { line-height: 1.3; }
-  @media print { body { margin: 0; } }
+  li { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; break-inside: avoid; }
+  .box { display: inline-block; width: 14px; height: 14px; border: 1.5px solid #333; border-radius: 3px; flex: 0 0 auto; }
+  .txt { line-height: 1.25; }
+  @media print { body { margin: 0; } @page { margin: 12mm; } }
 </style>
 </head>
 <body>
   <h1>${escapeHtml(title)}</h1>
-  ${sections}
+  <div class="cols">${sections}</div>
 </body>
 </html>`
 
