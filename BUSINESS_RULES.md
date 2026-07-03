@@ -489,6 +489,24 @@ pin). It is a reminder to make sure something you took on the trip comes home ag
   **SKIP** (no flag). Choosing any of the three returns to the search field for the next item.
   The **Bring back** option is hidden when adding into a `pack_down` checklist.
 
+## 19. Printing checklists
+
+Lists can be printed to paper as a hand-check sheet.
+
+- **Print a single list.** Each checklist card's menu has a **Print** action that prints
+  just that checklist.
+- **Print all.** The trip detail menu (the "edit" level for the trip) has **Print all lists**,
+  which prints every **visible** (non-hidden) checklist of the trip, grouped as sections in
+  the trip's **phase-section order** (§5).
+- **Completed items are ignored.** Printouts include only **outstanding** (unchecked) items —
+  what's left to do. A list with nothing outstanding is skipped; printing when everything is
+  done shows a "Nothing to print" notice.
+- **Hand-check boxes.** Each printed item has an empty checkbox to tick off by hand.
+- **No icons/controls.** The printout shows item names only (plus quantity where meaningful) —
+  none of the app's icons, buttons, or per-item controls.
+- Printing renders into a hidden document and opens the browser's native print dialog; it
+  never changes any data.
+
 ---
 
 ### Glossary of phases

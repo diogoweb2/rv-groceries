@@ -11,8 +11,17 @@ import { Progress } from '@/components/ui/progress'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin, Undo2, EyeOff, Eye, CircleCheck, CircleDashed } from 'lucide-react'
+import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin, Undo2, EyeOff, Eye, CircleCheck, CircleDashed, Printer } from 'lucide-react'
+import { printLists } from '@/lib/print'
 import type { Checklist, ChecklistItem } from '@/types'
+
+// Build a printable line for an item: name plus quantity where it's meaningful
+// (non-grocery lists show "× N"; grocery lists show "N ×").
+function printLine(item: ChecklistItem, isGrocery: boolean): string {
+  const qty = Math.max(1, Number(item.qty) || 1)
+  if (isGrocery) return qty > 1 ? `${qty} × ${item.name}` : item.name
+  return item.qty && qty > 1 ? `${item.name} × ${item.qty}` : item.name
+}
 
 interface Props {
   checklist: Checklist
@@ -72,6 +81,14 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
     }
     completeRef.current = isComplete
   }, [checked, total, checklist.hidden, checklist.name, checklist.id, tripId])
+
+  function handlePrint() {
+    setMenuOpen(false)
+    printLists(checklist.name, [{
+      name: checklist.name,
+      items: items.filter(i => !i.checked).map(i => printLine(i, isGrocery)),
+    }])
+  }
 
   async function handleToggleHidden() {
     setMenuOpen(false)
@@ -211,6 +228,12 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
                   className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
                 >
                   {checklist.hidden ? <><Eye className="w-4 h-4" /> Unhide</> : <><EyeOff className="w-4 h-4" /> Hide for this trip</>}
+                </button>
+                <button
+                  onClick={handlePrint}
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <Printer className="w-4 h-4" /> Print
                 </button>
                 <button
                   onClick={handleDeleteChecklist}

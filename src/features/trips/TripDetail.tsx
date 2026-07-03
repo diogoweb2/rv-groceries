@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTrips, useChecklists, useAmenities, useOrdering, useStores } from '@/hooks/useFirestore'
-import { updateTrip, deleteTrip, completeTrip, addChecklist, savePhaseOrder, saveChecklistOrder, saveChecklistPositions, rateTrip } from '@/lib/firestore'
+import { updateTrip, deleteTrip, completeTrip, addChecklist, savePhaseOrder, saveChecklistOrder, saveChecklistPositions, rateTrip, getTripChecklistsWithItems } from '@/lib/firestore'
+import { printLists, type PrintList } from '@/lib/print'
 import { useAppStore } from '@/lib/store'
 import { ChecklistCard } from './ChecklistCard'
 import { AddItemSheet } from './AddItemSheet'
@@ -9,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog } from '@/components/ui/dialog'
-import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, Plus, Check, Tag, GripVertical, Pencil, MapPin, Star, Eye, Backpack, Truck, PackageOpen, ShoppingCart, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, Plus, Check, Tag, GripVertical, Pencil, MapPin, Star, Eye, Backpack, Truck, PackageOpen, ShoppingCart, Printer, type LucideIcon } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -179,6 +180,29 @@ export function TripDetail() {
   const currentTrip = trip
   const badge = STATUS_BADGE[currentTrip.status]
 
+  // "Print all": every visible (non-hidden) checklist of the trip, outstanding
+  // items only, in the trip's phase-section order (§19).
+  async function handlePrintAll() {
+    setMenuOpen(false)
+    const data = await getTripChecklistsWithItems(currentTrip.id)
+    const lists: PrintList[] = []
+    for (const phase of ordering.phaseOrder) {
+      const inPhase = data
+        .filter(d => d.checklist.phase === phase && !d.checklist.hidden)
+        .sort((a, b) => a.checklist.order - b.checklist.order)
+      for (const { checklist, items } of inPhase) {
+        const isGrocery = checklist.phase === 'grocery'
+        const outstanding = items.filter(i => !i.checked).map(i => {
+          const qty = Math.max(1, Number(i.qty) || 1)
+          if (isGrocery) return qty > 1 ? `${qty} × ${i.name}` : i.name
+          return i.qty && qty > 1 ? `${i.name} × ${i.qty}` : i.name
+        })
+        lists.push({ name: checklist.name, items: outstanding })
+      }
+    }
+    printLists(currentTrip.title, lists)
+  }
+
   async function markComplete() {
     await completeTrip(currentTrip, identity)
     setMenuOpen(false)
@@ -343,6 +367,9 @@ export function TripDetail() {
                   )}
                   <button onClick={() => { setMenuOpen(false); setEditAmenities(trip.amenities) }} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
                     <Tag className="w-4 h-4" /> Edit amenities
+                  </button>
+                  <button onClick={handlePrintAll} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                    <Printer className="w-4 h-4" /> Print all lists
                   </button>
                   <button onClick={handleDelete} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-gray-50">
                     <Trash2 className="w-4 h-4" /> Delete trip

@@ -791,6 +791,29 @@ export async function deleteChecklist(tripId: string, checklistId: string) {
   await batch.commit()
 }
 
+// One-shot read of every checklist in a trip with its items, ordered the same
+// way the trip view is (by checklist `order`, items by `order`). Used by the
+// "Print all" action (§19) which needs item data the per-card subscriptions
+// don't expose at the trip level.
+export async function getTripChecklistsWithItems(
+  tripId: string,
+): Promise<{ checklist: Checklist; items: ChecklistItem[] }[]> {
+  const checklistsSnap = await getDocs(
+    query(collection(db, 'trips', tripId, 'checklists'), orderBy('order')),
+  )
+  const out: { checklist: Checklist; items: ChecklistItem[] }[] = []
+  for (const cl of checklistsSnap.docs) {
+    const itemsSnap = await getDocs(
+      query(collection(db, 'trips', tripId, 'checklists', cl.id, 'items'), orderBy('order')),
+    )
+    out.push({
+      checklist: docData<Checklist>(cl),
+      items: itemsSnap.docs.map((d) => docData<ChecklistItem>(d)),
+    })
+  }
+  return out
+}
+
 // ── Checklist Items ────────────────────────────────────────────────────────────
 
 export function subscribeItems(tripId: string, checklistId: string, cb: (items: ChecklistItem[]) => void) {
