@@ -11,31 +11,36 @@ import { Progress } from '@/components/ui/progress'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin, Undo2, EyeOff, Eye } from 'lucide-react'
+import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin, Undo2, EyeOff, Eye, CircleCheck, CircleDashed } from 'lucide-react'
 import type { Checklist, ChecklistItem } from '@/types'
 
 interface Props {
   checklist: Checklist
   tripId: string
   onAddItem: () => void
-  /** When set, checking an item here also copies it to this checklist (bring-to-RV). */
-  copyToOnCheck?: string
   /** Drag handle attributes/listeners from the sortable wrapper. */
   dragHandleProps?: React.HTMLAttributes<HTMLElement>
 }
 
-export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dragHandleProps }: Props) {
+export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }: Props) {
   const identity = useAppStore(s => s.identity)!
   const items = useChecklistItems(tripId, checklist.id)
   const stores = useStores()
   const [expanded, setExpanded] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState<string | null>(null)
+  const [showCompleted, setShowCompleted] = useState(true)
   const isGrocery = checklist.phase === 'grocery'
 
   const checked = items.filter(i => i.checked).length
   const total = items.length
   const progress = total ? (checked / total) * 100 : 0
+
+  // Completed items are auto-hidden within the card unless "Show completed" is on;
+  // when shown, they sort to the bottom (stable within each group).
+  const visibleItems = showCompleted
+    ? [...items].sort((a, b) => Number(a.checked) - Number(b.checked))
+    : items.filter(i => !i.checked)
 
   // When this checklist is pinned, keep the global snapshot in sync with any
   // item changes (add, delete, toggle). Skip the first render where items is
@@ -74,7 +79,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
   }
 
   async function handleToggle(item: ChecklistItem) {
-    await setChecklistItemChecked(tripId, checklist, item, !item.checked, identity, copyToOnCheck)
+    await setChecklistItemChecked(tripId, checklist, item, !item.checked, identity)
   }
 
   async function handleTogglePersist(item: ChecklistItem) {
@@ -194,6 +199,14 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
                   <Pencil className="w-4 h-4" /> {isGrocery ? 'Change store' : 'Rename'}
                 </button>
                 <button
+                  onClick={() => { setMenuOpen(false); setShowCompleted(v => !v) }}
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  {showCompleted
+                    ? <><CircleDashed className="w-4 h-4" /> Hide completed</>
+                    : <><CircleCheck className="w-4 h-4" /> Show completed</>}
+                </button>
+                <button
                   onClick={handleToggleHidden}
                   className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
                 >
@@ -214,7 +227,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
       {/* Items */}
       {expanded && (
         <div className="border-t border-gray-50 rounded-b-2xl overflow-hidden">
-          {items.map(item => (
+          {visibleItems.map(item => (
             <div
               key={item.id}
               className={`flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 ${item.checked ? 'bg-green-50/50' : ''}`}
@@ -301,6 +314,17 @@ export function ChecklistCard({ checklist, tripId, onAddItem, copyToOnCheck, dra
               </button>
             </div>
           ))}
+
+          {/* Hidden-completed hint */}
+          {!showCompleted && checked > 0 && (
+            <button
+              onClick={() => setShowCompleted(true)}
+              className="flex items-center gap-2 w-full px-4 py-2.5 text-xs text-gray-400 hover:bg-gray-50 border-b border-gray-50"
+            >
+              <CircleCheck className="w-3.5 h-3.5" />
+              {checked} completed {checked === 1 ? 'item' : 'items'} hidden — show
+            </button>
+          )}
 
           {/* Add item button */}
           <button

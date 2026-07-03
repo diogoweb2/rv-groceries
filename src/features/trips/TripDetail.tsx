@@ -120,11 +120,10 @@ function SortableSection({ phase, label, children }: { phase: ChecklistPhase; la
 }
 
 // A draggable checklist card within a section.
-function SortableChecklist({ checklist, tripId, onAddItem, copyToOnCheck }: {
+function SortableChecklist({ checklist, tripId, onAddItem }: {
   checklist: Checklist
   tripId: string
   onAddItem: () => void
-  copyToOnCheck?: string
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: checklist.id })
   const style = {
@@ -139,7 +138,6 @@ function SortableChecklist({ checklist, tripId, onAddItem, copyToOnCheck }: {
         checklist={checklist}
         tripId={tripId}
         onAddItem={onAddItem}
-        copyToOnCheck={copyToOnCheck}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
     </div>
@@ -170,9 +168,6 @@ export function TripDetail() {
   const [pendingRating, setPendingRating] = useState(0)
   const [showHidden, setShowHidden] = useState(false)
   const [pickingList, setPickingList] = useState(false)
-
-  // Bought groceries get copied into the "Day of departure" checklist (bring to RV).
-  const bringToRvId = checklists.find(c => c.phase === 'pre_dayof')?.id
 
   const trip = trips.find(t => t.id === id)
   if (!trip) return (
@@ -457,7 +452,6 @@ export function TripDetail() {
                               checklist={cl}
                               tripId={id!}
                               onAddItem={() => setAddingTo(cl.id)}
-                              copyToOnCheck={cl.phase === 'grocery' ? bringToRvId : undefined}
                             />
                           ))}
                         </div>

@@ -208,6 +208,86 @@ export async function migrateGroceryChecklistsToStoreIds() {
   if (changed) await batch.commit()
 }
 
+// One-time migration: previously, bought grocery items were copied into a
+// trip's *first* Day of departure checklist (mixing them with hand-made day-of
+// packing items). They now land in a dedicated "Spmkt->Truck" list (§8). Move
+// any existing grocery-copied items into that list: for each trip, an item in a
+// pre_dayof checklist whose name matches an item in one of the trip's grocery
+// checklists is a grocery copy, so relocate it. Idempotent — items already in
+// the "Spmkt->Truck" list are skipped, and it only touches trips that need it.
+export async function migrateGroceryRvItemsToSpmktList() {
+  const tripsSnap = await getDocs(collection(db, 'trips'))
+  for (const tripDoc of tripsSnap.docs) {
+    const tripId = tripDoc.id
+    const checklistsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
+
+    // Names bought in this trip's grocery checklists — the signal for a copy.
+    const groceryNames = new Set<string>()
+    for (const cl of checklistsSnap.docs) {
+      if ((cl.data().phase as ChecklistPhase) !== 'grocery') continue
+      const itemsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists', cl.id, 'items'))
+      itemsSnap.docs.forEach((d) => groceryNames.add(((d.data().name as string) ?? '').trim().toLowerCase()))
+    }
+    if (groceryNames.size === 0) continue
+
+    const rvList = checklistsSnap.docs.find(
+      (d) =>
+        (d.data().phase as ChecklistPhase) === 'pre_dayof' &&
+        ((d.data().name as string) ?? '').trim().toLowerCase() === RV_CHECKLIST_NAME.toLowerCase(),
+    )
+
+    // Day of departure checklists holding the grocery copies (all pre_dayof
+    // lists except the destination "Spmkt->Truck" list itself).
+    const sources = checklistsSnap.docs.filter(
+      (d) => (d.data().phase as ChecklistPhase) === 'pre_dayof' && d.id !== rvList?.id,
+    )
+
+    // Collect the items to move before creating the destination, so we don't
+    // create an empty "Spmkt->Truck" list on trips with nothing to migrate.
+    const toMove: { ref: ReturnType<typeof doc>; data: Record<string, unknown> }[] = []
+    for (const src of sources) {
+      const itemsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists', src.id, 'items'))
+      itemsSnap.docs.forEach((d) => {
+        if (groceryNames.has(((d.data().name as string) ?? '').trim().toLowerCase())) {
+          toMove.push({ ref: d.ref, data: d.data() })
+        }
+      })
+    }
+    if (toMove.length === 0) continue
+
+    // Resolve (or create) the destination list and its existing item names.
+    let rvId: string
+    const existingNames = new Set<string>()
+    if (rvList) {
+      rvId = rvList.id
+      const rvItemsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists', rvId, 'items'))
+      rvItemsSnap.docs.forEach((d) => existingNames.add(((d.data().name as string) ?? '').trim().toLowerCase()))
+    } else {
+      const order = checklistsSnap.docs.filter((d) => d.data().phase === 'pre_dayof').length
+      const ref = await addDoc(collection(db, 'trips', tripId, 'checklists'), {
+        tripId, name: RV_CHECKLIST_NAME, phase: 'pre_dayof' as const, order,
+      })
+      rvId = ref.id
+    }
+
+    const batch = writeBatch(db)
+    let order = existingNames.size
+    for (const m of toMove) {
+      const name = ((m.data.name as string) ?? '').trim()
+      const key = name.toLowerCase()
+      // Always remove from the source; only re-create in the destination if it
+      // isn't already there (dedupe), matching the "no duplicates" copy rule.
+      batch.delete(m.ref)
+      if (existingNames.has(key)) continue
+      const destRef = doc(collection(db, 'trips', tripId, 'checklists', rvId, 'items'))
+      batch.set(destRef, { ...m.data, checklistId: rvId, order })
+      existingNames.add(key)
+      order++
+    }
+    await batch.commit()
+  }
+}
+
 // ── Item Catalog ──────────────────────────────────────────────────────────────
 
 export function subscribeCatalog(cb: (items: CatalogItem[]) => void) {
@@ -600,18 +680,40 @@ export async function copyItemToChecklist(
   }))
 }
 
-// Copy a grocery item into a trip's first "Day of departure" checklist, if it
-// has one (the "bring to RV" rule, §8). No-op if there's no such checklist.
+// Name of the dedicated "Day of departure" checklist that bought groceries
+// (from trip Groceries or synced Supermarket) are copied into (§8). Kept
+// separate from any hand-made day-of packing list so the two don't mix.
+export const RV_CHECKLIST_NAME = 'Spmkt->Truck'
+
+// Find the trip's "Spmkt->Truck" checklist (phase pre_dayof), creating it if
+// none exists yet. This is the landing list for the "bring to RV" rule (§8).
+async function findOrCreateRvChecklist(tripId: string): Promise<string> {
+  const snap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
+  const existing = snap.docs.find(
+    (d) =>
+      (d.data().phase as ChecklistPhase) === 'pre_dayof' &&
+      ((d.data().name as string) ?? '').trim().toLowerCase() === RV_CHECKLIST_NAME.toLowerCase(),
+  )
+  if (existing) return existing.id
+  const order = snap.docs.filter((d) => d.data().phase === 'pre_dayof').length
+  const ref = await addDoc(collection(db, 'trips', tripId, 'checklists'), {
+    tripId,
+    name: RV_CHECKLIST_NAME,
+    phase: 'pre_dayof' as const,
+    order,
+  })
+  return ref.id
+}
+
+// Copy a grocery item into the trip's "Spmkt->Truck" (Day of departure)
+// checklist, creating that checklist if needed (the "bring to RV" rule, §8).
 async function copyGroceryItemToRv(
   tripId: string,
   item: { name: string; catalogItemId?: string; qty?: string },
   identity: UserIdentity,
 ) {
-  const checklistsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
-  const dayOf = checklistsSnap.docs
-    .filter((d) => (d.data().phase as ChecklistPhase) === 'pre_dayof')
-    .sort((a, b) => ((a.data().order as number) ?? 0) - ((b.data().order as number) ?? 0))[0]
-  if (dayOf) await copyItemToChecklist(tripId, dayOf.id, item, identity)
+  const rvId = await findOrCreateRvChecklist(tripId)
+  await copyItemToChecklist(tripId, rvId, item, identity)
 }
 
 // Find a trip's first "Pack down / return" (pack_down) checklist, creating one
@@ -759,15 +861,13 @@ export async function deleteItem(tripId: string, checklistId: string, itemId: st
 // Check/uncheck a checklist item, applying the persist-recurring rule (§12),
 // the grocery-checked → copy-to-RV rule (§8), and — when this item is
 // live-linked to a Supermarket item (§8/§15) — propagating the same checked
-// state there. `dayOfChecklistId`, when already known by the caller, skips
-// the extra lookup query.
+// state there.
 export async function setChecklistItemChecked(
   tripId: string,
   checklist: Checklist,
   item: ChecklistItem,
   checked: boolean,
   identity: UserIdentity,
-  dayOfChecklistId?: string,
 ) {
   await toggleItem(tripId, checklist.id, item.id, checked, identity, item.rev)
 
@@ -783,8 +883,7 @@ export async function setChecklistItemChecked(
   }
 
   if (checked && checklist.phase === 'grocery') {
-    if (dayOfChecklistId) await copyItemToChecklist(tripId, dayOfChecklistId, item, identity)
-    else await copyGroceryItemToRv(tripId, item, identity)
+    await copyGroceryItemToRv(tripId, item, identity)
   }
 
   // "Bring it back" rule (§18): checking off a flagged item copies it into the
@@ -988,7 +1087,9 @@ export async function setItemPersist(
 
 // Toggle the "bring it back" flag on an item (§18). When set, checking the item
 // off later copies it into the trip's Pack down / return list; see
-// setChecklistItemChecked.
+// setChecklistItemChecked. If the item is *already* checked when the flag is
+// toggled, reconcile the Pack down copy immediately — enabling copies it in,
+// disabling removes it — so flag order and check order don't matter.
 export async function setItemBringBack(
   tripId: string,
   checklist: Checklist,
@@ -997,6 +1098,15 @@ export async function setItemBringBack(
   identity: UserIdentity,
 ) {
   await updateItem(tripId, checklist.id, item.id, { bringBack }, identity, item.rev)
+
+  if (item.checked && checklist.phase !== 'pack_down') {
+    if (bringBack) {
+      const packDownId = await findOrCreatePackDownChecklist(tripId)
+      await copyItemToChecklist(tripId, packDownId, item, identity)
+    } else {
+      await removeItemFromPackDown(tripId, item.name)
+    }
+  }
 }
 
 // ── Create trip from pinned checklists ─────────────────────────────────────────

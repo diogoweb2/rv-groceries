@@ -4,6 +4,7 @@ import { AuthGate } from '@/auth/AuthGate'
 import {
   backfillCatalogFromItems, dedupeCatalog, syncTripStatuses,
   ensureDefaultStores, migrateSupermarketListsToStoreIds, migrateGroceryChecklistsToStoreIds,
+  migrateGroceryRvItemsToSpmktList,
 } from '@/lib/firestore'
 import { useTrips } from '@/hooks/useFirestore'
 import { useAppStore } from '@/lib/store'
@@ -51,6 +52,11 @@ function StoreSync() {
         await ensureDefaultStores()
         await migrateSupermarketListsToStoreIds()
         await migrateGroceryChecklistsToStoreIds()
+        // Heavy (reads every item) — run once per device rather than every load.
+        if (!localStorage.getItem('migratedGroceryRvItems')) {
+          await migrateGroceryRvItemsToSpmktList()
+          localStorage.setItem('migratedGroceryRvItems', '1')
+        }
       } catch {
         /* non-critical — will retry next load */
       }

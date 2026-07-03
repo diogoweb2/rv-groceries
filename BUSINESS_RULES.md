@@ -137,6 +137,13 @@ The Home screen focuses on a single trip, chosen in this priority:
   - **Auto-hide prompt on completion.** The moment a checklist becomes **100% complete** (its
     last item is checked), the user is asked whether to hide it for this trip. Declining leaves
     it visible. A list that is already complete when the trip is opened does not re-prompt.
+- **Completed items sort to the bottom.** Inside an expanded checklist card, checked (completed)
+  items are shown by default but **sorted to the bottom** of the list (below outstanding items,
+  preserving order within each group).
+- **Manually hide completed items.** The card's menu has a **"Hide completed" / "Show completed"**
+  toggle. Hiding removes checked items from the card (the `checked/total` progress still counts
+  them); a hint row ("N completed items hidden — show") then appears above "+ Add item" to reveal
+  them. This is view-only state, per card, not persisted and not carried to future trips.
 - **Drag-and-drop reordering.** From a trip, the user can drag (via a grip handle):
   - **Phase sections** (Before the trip, Day of departure, Pack down / return, Groceries) to
     change the order the sections appear in.
@@ -216,7 +223,13 @@ The `itemCatalog` collection is the **single global source** for item autocomple
 - **Checked → copy to RV.** When a grocery item is **checked** (bought) — whether directly in
   the trip, or via its linked Supermarket item — it is automatically **copied** into the trip's
   **Day of departure** (`pre_dayof`) checklist — the "bring to RV" list.
-  - The target is the first `pre_dayof` checklist of that trip. If none exists, nothing happens.
+  - The target is a dedicated **"Spmkt->Truck"** checklist in the `pre_dayof` phase, **created
+    automatically** if the trip doesn't have one yet (so grocery copies stay separate from any
+    hand-made day-of packing list). Every bought grocery item — added directly in the trip or
+    synced from Supermarket — lands here.
+  - **Migration.** Items previously copied into a trip's first `pre_dayof` checklist (the old
+    behaviour) are relocated into "Spmkt->Truck" on load: any `pre_dayof` item whose name matches
+    an item in one of the trip's grocery checklists is treated as a grocery copy and moved.
   - The copy is skipped if an item with the same name already exists in the target (idempotent;
     re-checking does not create duplicates).
   - It is a **copy, not a move**: the item stays (checked) in Groceries and appears (unchecked)
@@ -376,8 +389,8 @@ supermarket.
     one). Un-flagging removes the mirrored copy from the trip but leaves the item in Supermarket.
   - Once mirrored, the Supermarket item and the trip item are the same entry: checking, quantity
     changes, and deletion on either side apply to both (§8).
-  - Checking a camping-flagged item bought copies it into the trip's **Day of departure**
-    (`pre_dayof`, "move to RV/truck") list, via the same rule that fires for any checked trip
+  - Checking a camping-flagged item bought copies it into the trip's **"Spmkt->Truck"**
+    Day of departure (`pre_dayof`) list, via the same rule that fires for any checked trip
     grocery item (§8) — idempotent, skips a same-name item already there.
 - **Autocomplete.** Adding an item suggests **supermarket items only** — catalog entries of
   category `grocery` or `general` (never `camping`) — ranked by grocery usage. New custom names
@@ -462,6 +475,9 @@ pin). It is a reminder to make sure something you took on the trip comes home ag
   Pack down.
 - **Un-check removes the copy.** Un-checking the origin item removes the matching (same-name)
   entry from the trip's Pack down / return checklist(s), so a mistaken check is fully undone.
+- **Flag order doesn't matter.** Toggling the "bring it back" flag on an item that is
+  **already checked** reconciles the Pack down copy immediately: enabling the flag copies it in,
+  disabling removes it. So it works whether you check first then flag, or flag first then check.
 - **No duplicates.** The copy is skipped if an item with the same name already exists in the
   Pack down checklist (idempotent; re-checking never duplicates).
 - **Scope.** The flag is a per-item property (`bringBack`); it does not carry to future trips
