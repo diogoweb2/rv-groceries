@@ -716,19 +716,24 @@ async function copyGroceryItemToRv(
   await copyItemToChecklist(tripId, rvId, item, identity)
 }
 
-// Find a trip's first "Pack down / return" (pack_down) checklist, creating one
-// named "Bring back" if the trip has none. Used by the "bring it back" rule
-// (§18) so a checked item always has somewhere to land.
+export const BRING_BACK_CHECKLIST_NAME = 'Bringing back items'
+
+// Find the trip's dedicated "Bringing back items" (pack_down) checklist,
+// creating it if none exists yet. Used by the "bring it back" rule (§18) so a
+// checked item always lands in its own list — never a hand-made pack_down list.
 async function findOrCreatePackDownChecklist(tripId: string): Promise<string> {
   const snap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
-  const existing = snap.docs
-    .filter((d) => (d.data().phase as ChecklistPhase) === 'pack_down')
-    .sort((a, b) => ((a.data().order as number) ?? 0) - ((b.data().order as number) ?? 0))[0]
+  const existing = snap.docs.find(
+    (d) =>
+      (d.data().phase as ChecklistPhase) === 'pack_down' &&
+      ((d.data().name as string) ?? '').trim().toLowerCase() ===
+        BRING_BACK_CHECKLIST_NAME.toLowerCase(),
+  )
   if (existing) return existing.id
   const order = snap.docs.filter((d) => d.data().phase === 'pack_down').length
   const ref = await addDoc(collection(db, 'trips', tripId, 'checklists'), {
     tripId,
-    name: 'Bring back',
+    name: BRING_BACK_CHECKLIST_NAME,
     phase: 'pack_down' as const,
     order,
   })

@@ -469,8 +469,10 @@ pin). It is a reminder to make sure something you took on the trip comes home ag
   **copied** into the trip's **Pack down / return** (`pack_down`) checklist — so it shows up
   (unchecked) as something to account for when packing down. Checking it means "I've got the
   wallet" in the origin list; the copy in Pack down is the "did it come back?" reminder.
-- **Target list, created if missing.** The copy lands in the trip's first `pack_down`
-  checklist. If the trip has **no** Pack down checklist, one named **"Bring back"** is created.
+- **Target list, created if missing.** The copy always lands in a dedicated
+  **"Bringing back items"** checklist in the `pack_down` phase, **created automatically** the
+  first time a bring-back item is checked (so copies stay separate from any hand-made Pack down
+  list). It is never routed into an unrelated pack_down checklist.
 - **Copy, not move.** The item stays (checked) in its origin list and appears (unchecked) in
   Pack down.
 - **Un-check removes the copy.** Un-checking the origin item removes the matching (same-name)
