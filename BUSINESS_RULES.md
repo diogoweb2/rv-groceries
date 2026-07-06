@@ -384,7 +384,10 @@ supermarket.
   pointing at a store that no longer exists. Complete or otherwise clear the list first.
 - **Status.** A new list is **active**. The shopper marks items bought (a check), then taps
   **COMPLETE**. Completing sets the status to **complete**, which **hides the list** from the
-  Supermarket tab (only active lists are shown). Completion is allowed **whether or not**
+  Supermarket tab (only active lists are shown). The **COMPLETE** button is **hidden until at
+  least 20% of the list's items are checked off** — this guards against the person building the
+  list finishing it by mistake before shopping has meaningfully started. Completion is allowed
+  **whether or not**
   everything was bought — the shopper can complete with items still unbought (e.g. something was
   out of stock).
 - **Completion notification.** Completing a list sends a notification (§2) to the **other**

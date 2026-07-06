@@ -274,6 +274,9 @@ export function SupermarketDetail() {
   }
 
   const bought = items.filter(i => i.checked).length
+  // Only reveal COMPLETE once at least 20% of the list is checked off, so the
+  // person building the list can't finish it by mistake.
+  const canComplete = items.length > 0 && bought / items.length >= 0.2
 
   return (
     <div className="flex flex-col h-dvh bg-gray-50">
@@ -287,13 +290,15 @@ export function SupermarketDetail() {
             <h1 className="text-lg font-bold text-gray-800 truncate">{storeLabel(stores, list)}</h1>
             <p className="text-sm text-gray-500">{bought}/{items.length} bought</p>
           </div>
-          <Button
-            onClick={handleComplete}
-            disabled={completing || items.length === 0}
-            className="bg-[#2f6b4f] hover:bg-[#255a41] gap-2"
-          >
-            <CheckCheck className="w-4 h-4" /> COMPLETE
-          </Button>
+          {canComplete && (
+            <Button
+              onClick={handleComplete}
+              disabled={completing}
+              className="bg-[#2f6b4f] hover:bg-[#255a41] gap-2"
+            >
+              <CheckCheck className="w-4 h-4" /> COMPLETE
+            </Button>
+          )}
         </div>
       </div>
 
