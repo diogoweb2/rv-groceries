@@ -417,6 +417,10 @@ supermarket.
   list (below all other items); un-checking it leaves it in place rather than moving it back.
 - **Quantity stepper.** Every item is created with quantity 1 and can be adjusted anytime with a
   `+`/`-` stepper on its row (no upper cap, minimum 1).
+- **No per-item delete.** Supermarket rows have no trash button — the row's actions are the
+  bought check, the `+`/`-` stepper, and a tent (camping) toggle, kept large for easy tapping.
+  Items leave a list by being completed (§15 status), not deleted individually. (Deleting a
+  linked camping item still propagates from the trip side, §8.)
 
 ## 16. Supermarket auto-sort (learned ordering)
 

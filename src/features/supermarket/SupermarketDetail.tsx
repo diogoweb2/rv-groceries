@@ -19,7 +19,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { useSupermarketLists, useSupermarketItems, useCatalog, useTrips, useSupermarketSort, useStores } from '@/hooks/useFirestore'
 import {
-  addSupermarketItem, updateSupermarketItem, deleteSupermarketItemAndPropagate,
+  addSupermarketItem, updateSupermarketItem,
   setSupermarketItemChecked, setSupermarketItemQty, linkSupermarketItemToTrip, unlinkSupermarketItemFromTrip,
   completeSupermarketList, ensureCatalogItem,
   parseCampingFlag, storeLabel, sortedByMemory, learnSupermarketOrder,
@@ -27,7 +27,7 @@ import {
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ArrowLeft, CheckCheck, Trash2, Plus, Minus, Tent, GripVertical } from 'lucide-react'
+import { ArrowLeft, CheckCheck, Plus, Minus, Tent, GripVertical } from 'lucide-react'
 import type { SupermarketItem } from '@/types'
 
 function SortableItem({
@@ -35,13 +35,11 @@ function SortableItem({
   onToggle,
   onToggleCamping,
   onChangeQty,
-  onDelete,
 }: {
   item: SupermarketItem
   onToggle: (item: SupermarketItem) => void
   onToggleCamping: (item: SupermarketItem) => void
   onChangeQty: (item: SupermarketItem, delta: number) => void
-  onDelete: (item: SupermarketItem) => void
 }) {
   const qtyNum = Math.max(1, Number(item.qty) || 1)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
@@ -99,21 +97,13 @@ function SortableItem({
 
       <button
         onClick={() => onToggleCamping(item)}
-        className={`p-1.5 rounded-lg shrink-0 transition-colors ${
+        className={`w-10 h-10 rounded-lg shrink-0 flex items-center justify-center transition-colors ${
           item.forCamping ? 'bg-emerald-50 text-[#2f6b4f]' : 'text-gray-300 hover:text-gray-500'
         }`}
         aria-label={item.forCamping ? 'Remove camping flag' : 'Flag for camping'}
         title="For camping"
       >
-        <Tent className="w-4 h-4" />
-      </button>
-
-      <button
-        onClick={() => onDelete(item)}
-        className="text-gray-300 hover:text-red-400 p-1 shrink-0"
-        aria-label="Delete item"
-      >
-        <Trash2 className="w-4 h-4" />
+        <Tent className="w-6 h-6" />
       </button>
     </div>
   )
@@ -358,7 +348,6 @@ export function SupermarketDetail() {
                 onToggle={toggleBought}
                 onToggleCamping={toggleCamping}
                 onChangeQty={changeQty}
-                onDelete={deleteSupermarketItemAndPropagate}
               />
             ))}
           </SortableContext>
