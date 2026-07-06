@@ -5,13 +5,13 @@ import {
   subscribeItems, subscribeGroceryLists, subscribeGroceryItems,
   subscribeOrdering, DEFAULT_PHASE_ORDER, subscribeTemplates,
   subscribeSupermarketLists, subscribeSupermarketItems, subscribeNotifications,
-  subscribeSupermarketSort, subscribeFeedback,
+  subscribeSupermarketSort, subscribeFeedback, subscribeProcedures,
 } from '@/lib/firestore'
 import type {
   Amenity, Store, CatalogItem, PinnedChecklist, Trip,
   Checklist, ChecklistItem, GroceryList, GroceryItem, OrderingPrefs, Template,
   SupermarketList, SupermarketItem, SupermarketSortMemory, AppNotification, UserIdentity,
-  Feedback,
+  Feedback, Procedure,
 } from '@/types'
 
 export function useAmenities() {
@@ -107,6 +107,12 @@ export function useSupermarketItems(listId: string | undefined) {
 export function useSupermarketSort() {
   const [data, setData] = useState<SupermarketSortMemory>({ stores: {} })
   useEffect(() => subscribeSupermarketSort(setData), [])
+  return data
+}
+
+export function useProcedures() {
+  const [data, setData] = useState<Procedure[]>([])
+  useEffect(() => subscribeProcedures(setData), [])
   return data
 }
 

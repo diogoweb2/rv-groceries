@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useChecklistItems, useStores } from '@/hooks/useFirestore'
 import {
-  updateChecklist, deleteChecklist, setItemPersist, setItemBringBack, savePinnedChecklist, removePinnedChecklist,
+  updateChecklist, deleteChecklist, setItemPersist, setItemDestination, itemDestination, setItemCompleted,
+  savePinnedChecklist, removePinnedChecklist,
   pushPinnedChecklistToTrips,
   setChecklistItemChecked, updateChecklistItemAndPropagate, deleteChecklistItemAndPropagate,
   unlinkChecklistItemFromSupermarket,
@@ -11,8 +12,9 @@ import { Progress } from '@/components/ui/progress'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin, Undo2, EyeOff, Eye, CircleCheck, CircleDashed, Printer } from 'lucide-react'
+import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin, EyeOff, Eye, CircleCheck, CircleDashed, Printer } from 'lucide-react'
 import { printLists } from '@/lib/print'
+import { destinationMeta, destinationIcon, nextDestination } from './destination'
 import type { Checklist, ChecklistItem } from '@/types'
 
 // Build a printable line for an item: name plus quantity where it's meaningful
@@ -46,9 +48,9 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
   const progress = total ? (checked / total) * 100 : 0
 
   // Completed items are auto-hidden within the card unless "Show completed" is on;
-  // when shown, they sort to the bottom (stable within each group).
+  // when shown, trip-completed (§20) sink to the very bottom, then checked items.
   const visibleItems = showCompleted
-    ? [...items].sort((a, b) => Number(a.checked) - Number(b.checked))
+    ? [...items].sort((a, b) => Number(!!a.completed) - Number(!!b.completed) || Number(a.checked) - Number(b.checked))
     : items.filter(i => !i.checked)
 
   // When this checklist is pinned, keep the global snapshot in sync with any
@@ -103,12 +105,16 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
     await setItemPersist(tripId, checklist, item, !item.persist, identity)
   }
 
-  async function handleToggleBringBack(item: ChecklistItem) {
-    await setItemBringBack(tripId, checklist, item, !item.bringBack, identity)
+  async function handleCycleDestination(item: ChecklistItem) {
+    await setItemDestination(tripId, checklist, item, nextDestination(itemDestination(item)), identity)
   }
 
   async function handleDelete(item: ChecklistItem) {
     await deleteChecklistItemAndPropagate(tripId, checklist, item)
+  }
+
+  async function handleToggleComplete(item: ChecklistItem) {
+    await setItemCompleted(tripId, checklist.id, item, !item.completed, identity)
   }
 
   async function handleChangeQty(item: ChecklistItem, delta: number) {
@@ -316,25 +322,41 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
                 <Pin className={`w-5 h-5 ${item.persist ? 'fill-current' : ''}`} />
               </button>
 
-              {/* Bring it back (copy to Pack down / return when checked, §18) */}
-              {checklist.phase !== 'pack_down' && (
+              {/* Final destination (§18): Home / Truck / RV — tap to cycle */}
+              {(() => {
+                const dest = itemDestination(item)
+                const meta = destinationMeta(dest)
+                const Icon = destinationIcon(dest)
+                return (
+                  <button
+                    onClick={() => handleCycleDestination(item)}
+                    aria-label={meta ? `Final destination: ${meta.label} — tap to change` : 'Set final destination'}
+                    className={`p-2.5 -m-1 ${meta ? 'text-[#2f6b4f]' : 'text-gray-300 hover:text-gray-500'}`}
+                  >
+                    <Icon className="w-5 h-5" />
+                  </button>
+                )
+              })()}
+
+              {/* Complete for the whole trip (§20): hides it from every later
+                  stop. Delete stays available once completed. */}
+              <button
+                onClick={() => handleToggleComplete(item)}
+                aria-label={item.completed ? 'Un-complete (show again this trip)' : 'Complete for the whole trip'}
+                aria-pressed={!!item.completed}
+                className={`p-2.5 -m-1 ${item.completed ? 'text-[#2f6b4f]' : 'text-gray-300 hover:text-[#2f6b4f]'}`}
+              >
+                <CircleCheck className="w-5 h-5" />
+              </button>
+              {item.completed && (
                 <button
-                  onClick={() => handleToggleBringBack(item)}
-                  aria-label={item.bringBack ? "Don't bring it back" : 'Bring it back to the Pack down list when checked'}
-                  aria-pressed={!!item.bringBack}
-                  className={`p-2.5 -m-1 ${item.bringBack ? 'text-[#2f6b4f]' : 'text-gray-300 hover:text-gray-500'}`}
+                  onClick={() => handleDelete(item)}
+                  className="text-gray-300 hover:text-red-400 p-2.5 -m-1"
+                  aria-label="Delete item"
                 >
-                  <Undo2 className="w-5 h-5" />
+                  <Trash2 className="w-5 h-5" />
                 </button>
               )}
-
-              {/* Delete */}
-              <button
-                onClick={() => handleDelete(item)}
-                className="text-gray-300 hover:text-red-400 p-2.5 -m-1"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
             </div>
           ))}
 

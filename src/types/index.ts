@@ -1,10 +1,58 @@
 export type UserIdentity = 'diogo' | 'alice'
 
-export type ChecklistPhase = 'pre_early' | 'pre_dayof' | 'pack_down' | 'grocery'
+// Legacy phases (`pre_early`/`pre_dayof`/`pack_down`) are migrated into `other`
+// under the stage-driven model (§20); only `grocery` and `other` are used going
+// forward. The legacy values remain in the type for old data + migration reads.
+export type ChecklistPhase = 'pre_early' | 'pre_dayof' | 'pack_down' | 'grocery' | 'other'
 
 export type TripStatus = 'planned' | 'active' | 'completed' | 'cancelled'
 
+/**
+ * The fixed trip route is Home → Warehouse → Campsite → Warehouse → Home
+ * (§20). A transition is the act of leaving one stop for the next; safety
+ * procedures attach to transitions.
+ */
+export type TransitionId =
+  | 'leave_home'
+  | 'leave_warehouse_go'
+  | 'leave_campsite'
+  | 'leave_warehouse_return'
+  | 'arrive_home'
+
+export interface ProcedureStep {
+  id: string
+  text: string
+}
+
+/**
+ * The global safety-procedure template for one transition (§20). One doc per
+ * transition in the `procedures` collection; steps are shared across trips,
+ * while per-trip check state lives on the trip document.
+ */
+export interface Procedure {
+  id: TransitionId
+  steps: ProcedureStep[]
+}
+
+/** Per-trip, per-transition procedure progress, stored on the trip document. */
+export interface TransitionState {
+  /** Ids of the procedure steps checked off for this transition. */
+  checked?: string[]
+  /** Step ids left unchecked when the user chose to skip past the interrupt. */
+  skippedSteps?: string[]
+  skippedAt?: string
+  advancedAt?: string
+  advancedBy?: UserIdentity
+}
+
 export type GroceryListStatus = 'draft' | 'sent'
+
+/**
+ * Where an item finally belongs when the trip is over (§18): back at Home,
+ * living in the Truck, or living in the RV. `home` items are copied into the
+ * Pack down / return list when checked, so they aren't left behind.
+ */
+export type ItemDestination = 'home' | 'truck' | 'rv'
 
 /** A feedback entry is either a reported bug or a suggested improvement (§17). */
 export type FeedbackKind = 'bug' | 'improvement'
@@ -74,6 +122,13 @@ export interface Trip {
     diogo?: number
     alice?: number
   }
+  /**
+   * Where in the fixed route the trip currently is (§20): an index into
+   * TRIP_STOPS (0 = Home … 4 = back Home). Absent = 0. Shared by both users.
+   */
+  currentStop?: number
+  /** Per-transition safety-procedure progress for this trip (§20). */
+  transitions?: Partial<Record<TransitionId, TransitionState>>
 }
 
 export interface Checklist {
@@ -102,6 +157,7 @@ export interface PinnedChecklistItem {
   name: string
   catalogItemId?: string
   qty?: string
+  destination?: ItemDestination
 }
 
 /** A globally-stored snapshot of a pinned checklist, seeded into new trips at creation. */
@@ -135,9 +191,22 @@ export interface ChecklistItem {
   order: number
   /** When true, the item carries over to future trips until it is checked. */
   persist?: boolean
+  /** The item's final destination (§18): where it belongs when the trip ends. */
+  destination?: ItemDestination
   /**
-   * When true, checking this item off copies it into the trip's "Pack down /
-   * return" checklist — the "bring it back" rule (§18). Created if none exists.
+   * Stop indices (0–4) at which this item has been handled/checked in the
+   * stage-driven flow (§20). Per-stop and independent of `checked`.
+   */
+  stagesDone?: number[]
+  /**
+   * Trip-wide "done, stop showing it" flag (§20): a completed item is hidden
+   * from every stop's derived view. Independent of the persist pin — a pinned
+   * item still recurs next trip when completed.
+   */
+  completed?: boolean
+  /**
+   * Legacy "bring it back" flag — superseded by `destination` (`bringBack:
+   * true` reads as destination `home`). Kept only as a read fallback.
    */
   bringBack?: boolean
   /**
@@ -167,6 +236,7 @@ export interface PersistentItem {
   checklistName: string
   catalogItemId?: string
   qty?: string
+  destination?: ItemDestination
 }
 
 export interface GroceryList {

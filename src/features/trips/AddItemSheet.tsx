@@ -1,12 +1,21 @@
 import { useState, useMemo } from 'react'
 import { useCatalog, useStores, useChecklistItems, useTrips } from '@/hooks/useFirestore'
-import { addItem, ensureCatalogItem, mirrorGroceryItemToSupermarket, setItemPersist, setItemBringBack } from '@/lib/firestore'
+import { addItem, ensureCatalogItem, mirrorGroceryItemToSupermarket, setItemDestination } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Sheet } from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Search, Plus, Pin, Undo2 } from 'lucide-react'
-import type { CatalogItem, Checklist, ChecklistItem } from '@/types'
+import { Search, Plus } from 'lucide-react'
+import { DESTINATIONS } from './destination'
+import type { CatalogItem, Checklist, ChecklistItem, ItemDestination } from '@/types'
+
+// Step 2 of adding an item (§18): pick the item's final destination. Required —
+// there is no skip. (Pinning to future trips is done later, on the item row.)
+const DESTINATION_HINTS: Record<ItemDestination, string> = {
+  home: 'Comes camping, must come back home',
+  truck: 'Stays in the truck',
+  rv: 'Stays in the RV',
+}
 
 interface Props {
   tripId: string
@@ -23,11 +32,8 @@ export function AddItemSheet({ tripId, checklist, onClose }: Props) {
   const existingItems = useChecklistItems(tripId, checklistId)
   const [query, setQuery] = useState('')
   const [saving, setSaving] = useState(false)
-  // After an item is added, a second step asks whether to flag it "bring every
-  // trip" (§12) or "bring back" (§18), so the user can set these without
-  // opening the list afterward.
+  // After an item is added, a second step asks for its final destination (§18).
   const [pending, setPending] = useState<{ id: string; name: string; catalogItemId?: string } | null>(null)
-  const canBringBack = checklist.phase !== 'pack_down'
 
   const storeMap = Object.fromEntries(stores.map(s => [s.id, s.name]))
   const existingNames = new Set(existingItems.map(i => i.name.toLowerCase()))
@@ -48,16 +54,15 @@ export function AddItemSheet({ tripId, checklist, onClose }: Props) {
       .slice(0, 20)
   }, [catalog, query, existingNames])
 
-  // Step 2: apply the chosen flag (§12/§18) to the just-added item, then return
-  // to search for the next one.
-  async function applyPendingFlag(flag: 'persist' | 'bringBack' | 'skip') {
-    if (pending && flag !== 'skip') {
+  // Step 2: set the chosen destination on the just-added item, then return to
+  // search for the next one.
+  async function applyPendingDestination(destination: ItemDestination) {
+    if (pending) {
       const newItem = {
         id: pending.id, checklistId, tripId, name: pending.name, catalogItemId: pending.catalogItemId,
         qty: '', checked: false, order: existingItems.length, rev: 1,
       } as ChecklistItem
-      if (flag === 'persist') await setItemPersist(tripId, checklist, newItem, true, identity)
-      else await setItemBringBack(tripId, checklist, newItem, true, identity)
+      await setItemDestination(tripId, checklist, newItem, destination, identity)
     }
     setPending(null)
   }
@@ -120,39 +125,27 @@ export function AddItemSheet({ tripId, checklist, onClose }: Props) {
     else addCustomItem()
   }
 
-  // Step 2 — after an item is added, ask how it should recur.
+  // Step 2 — after an item is added, ask where it finally belongs (§18).
   if (pending) {
     return (
       <Sheet open onClose={onClose} title={`Add to ${checklist.name}`}>
         <div className="p-5 flex flex-col gap-4">
           <p className="text-center text-gray-500 text-sm">
-            Added <strong className="text-gray-800">{pending.name}</strong>
+            Added <strong className="text-gray-800">{pending.name}</strong> — where does it belong after the trip?
           </p>
-          <button
-            onClick={() => applyPendingFlag('persist')}
-            className="flex items-center gap-3 w-full rounded-2xl border-2 border-gray-200 px-4 py-4 text-left hover:border-[#2f6b4f] hover:bg-emerald-50 transition-colors"
-          >
-            <Pin className="w-6 h-6 text-[#2f6b4f] shrink-0" />
-            <span className="flex flex-col">
-              <span className="text-base font-semibold text-gray-800">Bring every trip</span>
-              <span className="text-xs text-gray-500">Auto-add it to every future trip until packed</span>
-            </span>
-          </button>
-          {canBringBack && (
+          {DESTINATIONS.map(opt => (
             <button
-              onClick={() => applyPendingFlag('bringBack')}
+              key={opt.value}
+              onClick={() => applyPendingDestination(opt.value)}
               className="flex items-center gap-3 w-full rounded-2xl border-2 border-gray-200 px-4 py-4 text-left hover:border-[#2f6b4f] hover:bg-emerald-50 transition-colors"
             >
-              <Undo2 className="w-6 h-6 text-[#2f6b4f] shrink-0" />
+              <opt.icon className="w-6 h-6 text-[#2f6b4f] shrink-0" />
               <span className="flex flex-col">
-                <span className="text-base font-semibold text-gray-800">Bring back</span>
-                <span className="text-xs text-gray-500">Move to "Pack down / return" once checked off</span>
+                <span className="text-base font-semibold text-gray-800">{opt.label}</span>
+                <span className="text-xs text-gray-500">{DESTINATION_HINTS[opt.value]}</span>
               </span>
             </button>
-          )}
-          <Button variant="secondary" size="lg" className="w-full" onClick={() => applyPendingFlag('skip')}>
-            SKIP
-          </Button>
+          ))}
         </div>
       </Sheet>
     )

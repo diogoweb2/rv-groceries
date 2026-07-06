@@ -17,6 +17,8 @@ import {
   collectionGroup,
   increment,
   deleteField,
+  arrayUnion,
+  arrayRemove,
 } from 'firebase/firestore'
 import { db } from './firebase'
 import type {
@@ -24,7 +26,7 @@ import type {
   GroceryList, GroceryItem, UserIdentity, OrderingPrefs, ChecklistPhase,
   PersistentItem, TripStatus, PinnedChecklist, Template,
   SupermarketList, SupermarketItem, SupermarketSortMemory,
-  AppNotification, Feedback
+  AppNotification, Feedback, TransitionId, Procedure, ProcedureStep, ItemDestination
 } from '@/types'
 
 export const DEFAULT_PHASE_ORDER: ChecklistPhase[] = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
@@ -288,6 +290,64 @@ export async function migrateGroceryRvItemsToSpmktList() {
   }
 }
 
+// One-time migration to the stage-driven two-list model (§20): for each trip,
+// move every item from a legacy non-grocery checklist (pre_early / pre_dayof /
+// pack_down) into a single "Other" (`other`) checklist, then delete the emptied
+// legacy checklists (including the retired auto-lists "Spmkt->Truck" and
+// "Bringing back items"). Grocery checklists are left untouched. Idempotent:
+// once a trip has only grocery + other lists, it's skipped.
+const LEGACY_PHASES = new Set(['pre_early', 'pre_dayof', 'pack_down'])
+
+// Collapse one trip's legacy non-grocery checklists into its single Other list.
+// Returns false (no-op) when the trip is already on the two-list model.
+export async function collapseTripToOther(tripId: string): Promise<boolean> {
+  const checklistsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
+  const legacy = checklistsSnap.docs.filter((d) => LEGACY_PHASES.has(d.data().phase as string))
+  if (legacy.length === 0) return false
+
+  const existingOther = checklistsSnap.docs.find((d) => (d.data().phase as string) === 'other')
+  let otherId: string
+  const otherNames = new Set<string>()
+  if (existingOther) {
+    otherId = existingOther.id
+    const itemsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists', otherId, 'items'))
+    itemsSnap.docs.forEach((d) => otherNames.add(((d.data().name as string) ?? '').trim().toLowerCase()))
+  } else {
+    const ref = await addDoc(collection(db, 'trips', tripId, 'checklists'), {
+      tripId, name: OTHER_CHECKLIST_NAME, phase: 'other' as const, order: 0,
+    })
+    otherId = ref.id
+  }
+
+  const batch = writeBatch(db)
+  let order = otherNames.size
+  for (const cl of legacy) {
+    const itemsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists', cl.id, 'items'))
+    for (const d of itemsSnap.docs) {
+      const name = ((d.data().name as string) ?? '').trim()
+      const key = name.toLowerCase()
+      batch.delete(d.ref)
+      if (!key || otherNames.has(key)) continue
+      const destRef = doc(collection(db, 'trips', tripId, 'checklists', otherId, 'items'))
+      batch.set(destRef, { ...d.data(), checklistId: otherId, order })
+      otherNames.add(key)
+      order++
+    }
+    batch.delete(cl.ref)
+  }
+  await batch.commit()
+  return true
+}
+
+// One-time migration to the stage-driven two-list model (§20): collapse every
+// trip. Idempotent — trips already on grocery + other are skipped.
+export async function migratePhasesToOther() {
+  const tripsSnap = await getDocs(collection(db, 'trips'))
+  for (const tripDoc of tripsSnap.docs) {
+    await collapseTripToOther(tripDoc.id)
+  }
+}
+
 // ── Item Catalog ──────────────────────────────────────────────────────────────
 
 export function subscribeCatalog(cb: (items: CatalogItem[]) => void) {
@@ -417,7 +477,7 @@ export async function savePinnedChecklist(
   await setDoc(doc(db, 'pinnedChecklists', key), {
     name: name.trim(),
     phase,
-    items: items.map(i => clean({ name: i.name, catalogItemId: i.catalogItemId || undefined, qty: i.qty || undefined })),
+    items: items.map(i => clean({ name: i.name, catalogItemId: i.catalogItemId || undefined, qty: i.qty || undefined, destination: itemDestination(i) })),
     updatedAt: new Date().toISOString(),
     updatedBy: identity,
   })
@@ -478,6 +538,7 @@ async function pushPersistentItemToTrips(
       catalogItemId: rec.catalogItemId || undefined,
       name: rec.name,
       qty: rec.qty ?? '',
+      destination: rec.destination,
       checked: false,
       order: existingNames.size,
       rev: 1,
@@ -515,6 +576,7 @@ export async function pushPinnedChecklistToTrips(
         catalogItemId: item.catalogItemId || undefined,
         name: item.name,
         qty: item.qty || '',
+        destination: itemDestination(item),
         checked: false,
         order,
         rev: 1,
@@ -628,6 +690,236 @@ export function findNextOrActiveTrip(trips: Trip[]): Trip | undefined {
   )
 }
 
+// ── Trip route (stops & transitions) + safety procedures ──────────────────────
+// Every trip follows the same fixed route (§20):
+//   Home → Warehouse → Campsite → Warehouse → Home
+// `trip.currentStop` is the index of the stop the crew is at. Advancing to the
+// next stop crosses a *transition*, and each transition has a shared safety
+// procedure (a `procedures` doc) whose per-trip check state lives on the trip.
+
+export const TRIP_STOPS = ['Home', 'Warehouse', 'Campsite', 'Warehouse', 'Home'] as const
+
+// Transition i is the act of leaving stop i for stop i+1 (safety checklist fires
+// on advance). `arrive_home` is the terminal checklist at the last stop — it has
+// no next stop; completing it finishes the trip and prompts the rating (§20).
+export const TRANSITIONS: { id: TransitionId; label: string }[] = [
+  { id: 'leave_home', label: 'Leaving home' },
+  { id: 'leave_warehouse_go', label: 'Leaving the warehouse' },
+  { id: 'leave_campsite', label: 'Leaving the campsite' },
+  { id: 'leave_warehouse_return', label: 'Leaving the warehouse (heading home)' },
+]
+
+// The safety checklist shown at each stop (by stop index). Stops advance by the
+// transition of the same index; the last stop uses the terminal `arrive_home`.
+export const STOP_PROCEDURE: (TransitionId | null)[] = [
+  'leave_home', 'leave_warehouse_go', 'leave_campsite', 'leave_warehouse_return', 'arrive_home',
+]
+
+export const FINAL_TRANSITION: TransitionId = 'arrive_home'
+
+export const PROCEDURE_LABELS: Record<TransitionId, string> = {
+  leave_home: 'Leaving home',
+  leave_warehouse_go: 'Leaving the warehouse',
+  leave_campsite: 'Leaving the campsite',
+  leave_warehouse_return: 'Leaving the warehouse (heading home)',
+  arrive_home: 'Arriving home (final checks)',
+}
+
+// Which items each stop puts in front of the user (§20). `null` = no item list
+// (safety only). `remapHomeToTruck` shows a Home-destination item as Truck at
+// that moment (it must ride in the truck before it can go home).
+export interface StageConfig {
+  itemFilter: ((dest: ItemDestination | undefined) => boolean) | null
+  remapHomeToTruck: boolean
+  label: string
+}
+
+export const TRIP_STAGES: StageConfig[] = [
+  { itemFilter: () => true, remapHomeToTruck: false, label: 'Load everything into the truck' },
+  { itemFilter: null, remapHomeToTruck: false, label: 'Safety checklist only' },
+  { itemFilter: () => true, remapHomeToTruck: true, label: 'Stow in the RV or truck' },
+  { itemFilter: () => true, remapHomeToTruck: true, label: 'Sort between RV and truck' },
+  { itemFilter: (d) => (d ?? 'home') === 'home', remapHomeToTruck: false, label: 'Bring inside the house' },
+]
+
+// The destination to *display* for an item at a given stop (Home → Truck where
+// the stage remaps it). The stored destination is never changed by this.
+export function displayedDestination(
+  dest: ItemDestination | undefined,
+  stopIndex: number,
+): ItemDestination | undefined {
+  const stage = TRIP_STAGES[stopIndex]
+  if (stage?.remapHomeToTruck && (dest ?? 'home') === 'home') return 'truck'
+  return dest
+}
+
+// Toggle an item's per-stop "done" mark (§20). Independent of `checked`.
+export async function setStageItemDone(
+  tripId: string,
+  checklistId: string,
+  item: ChecklistItem,
+  stopIndex: number,
+  done: boolean,
+  identity: UserIdentity,
+) {
+  await updateItem(tripId, checklistId, item.id, {
+    stagesDone: done
+      ? Array.from(new Set([...(item.stagesDone ?? []), stopIndex]))
+      : (item.stagesDone ?? []).filter((s) => s !== stopIndex),
+  }, identity, item.rev)
+}
+
+// Mark an item done for the whole trip (§20): hides it from every stop's
+// derived view. Completing also checks its radio. Deliberately does NOT route
+// through the persist rule, so a pinned item stays in the recurring set and
+// still shows up next trip. No Supermarket "bought" propagation — completion is
+// trip-management, not shopping.
+export async function setItemCompleted(
+  tripId: string,
+  checklistId: string,
+  item: ChecklistItem,
+  completed: boolean,
+  identity: UserIdentity,
+) {
+  await updateItem(
+    tripId, checklistId, item.id,
+    completed ? { completed: true, checked: true } : { completed: false },
+    identity, item.rev,
+  )
+}
+
+// The single free-form list for a trip under the two-list model (§20).
+export const OTHER_CHECKLIST_NAME = 'Other'
+
+export async function findOrCreateOtherChecklist(tripId: string): Promise<string> {
+  const snap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
+  const existing = snap.docs.find((d) => (d.data().phase as ChecklistPhase) === 'other')
+  if (existing) return existing.id
+  const ref = await addDoc(collection(db, 'trips', tripId, 'checklists'), {
+    tripId, name: OTHER_CHECKLIST_NAME, phase: 'other' as const, order: 0,
+  })
+  return ref.id
+}
+
+export function subscribeProcedures(cb: (items: Procedure[]) => void) {
+  return onSnapshot(collection(db, 'procedures'), (snap) =>
+    cb(snap.docs.map((d) => docData<Procedure>(d)))
+  )
+}
+
+function newStepId(): string {
+  return Math.random().toString(36).slice(2, 10)
+}
+
+// One-time seed of the starter safety procedures (§20). Per-transition: only
+// creates docs that don't exist yet, so user edits are never overwritten.
+const DEFAULT_PROCEDURE_STEPS: Record<TransitionId, string[]> = {
+  leave_home: [],
+  leave_warehouse_go: [
+    'Trailer battery connected',
+    'Hitch pin + safety chains secured',
+    'Lights & brake check',
+    'Tire pressure checked',
+    'Jack raised',
+    'Mirrors adjusted',
+  ],
+  leave_campsite: [
+    'Antenna down',
+    'Stabilizers up',
+    'Windows & vents closed',
+    'Tanks emptied',
+    'Propane closed',
+    'Final walk-around',
+  ],
+  leave_warehouse_return: [
+    'Trailer battery disconnected',
+    'Trailer aligned in its spot',
+    'Wheels chocked',
+    'Propane closed',
+    'RV locked',
+  ],
+  arrive_home: [
+    'Truck unloaded',
+    'Fridge/cooler emptied',
+    'Trailer locked',
+  ],
+}
+
+export const ALL_PROCEDURE_IDS: TransitionId[] = [...TRANSITIONS.map((t) => t.id), FINAL_TRANSITION]
+
+export async function ensureDefaultProcedures() {
+  const snap = await getDocs(collection(db, 'procedures'))
+  const have = new Set(snap.docs.map((d) => d.id))
+  for (const id of ALL_PROCEDURE_IDS) {
+    if (have.has(id)) continue
+    await setDoc(doc(db, 'procedures', id), {
+      steps: DEFAULT_PROCEDURE_STEPS[id].map((text) => ({ id: newStepId(), text })),
+    })
+  }
+}
+
+// Procedure steps are a shared template: adding/removing a step changes it for
+// every future trip (and every not-yet-crossed transition of current trips).
+export async function addProcedureStep(transitionId: TransitionId, text: string) {
+  const trimmed = text.trim()
+  if (!trimmed) return
+  const step: ProcedureStep = { id: newStepId(), text: trimmed }
+  await setDoc(doc(db, 'procedures', transitionId), { steps: arrayUnion(step) }, { merge: true })
+}
+
+export async function removeProcedureStep(transitionId: TransitionId, step: ProcedureStep) {
+  await updateDoc(doc(db, 'procedures', transitionId), { steps: arrayRemove(step) })
+}
+
+// Replace a transition's whole step list — used by Manage → Safety checklists
+// for renaming a step and for drag reordering. Step ids are preserved, so
+// per-trip check state keeps pointing at the right steps.
+export async function saveProcedureSteps(transitionId: TransitionId, steps: ProcedureStep[]) {
+  await setDoc(doc(db, 'procedures', transitionId), { steps })
+}
+
+// Check/uncheck one procedure step for one trip's transition. State is on the
+// trip doc so it is shared live between Diogo and Alice and resets naturally
+// with each new trip.
+export async function setTransitionStepChecked(
+  tripId: string,
+  transitionId: TransitionId,
+  stepId: string,
+  checked: boolean,
+) {
+  await updateDoc(doc(db, 'trips', tripId), {
+    [`transitions.${transitionId}.checked`]: checked ? arrayUnion(stepId) : arrayRemove(stepId),
+  })
+}
+
+// Advance the trip to the next stop, recording who crossed the transition and
+// which safety steps (if any) were skipped unchecked. Clamped to the route.
+export async function advanceTripStop(
+  trip: Trip,
+  transitionId: TransitionId,
+  skippedStepIds: string[],
+  identity: UserIdentity,
+) {
+  const next = Math.min((trip.currentStop ?? 0) + 1, TRIP_STOPS.length - 1)
+  const data: Record<string, unknown> = {
+    currentStop: next,
+    [`transitions.${transitionId}.advancedAt`]: new Date().toISOString(),
+    [`transitions.${transitionId}.advancedBy`]: identity,
+  }
+  if (skippedStepIds.length > 0) {
+    data[`transitions.${transitionId}.skippedSteps`] = skippedStepIds
+    data[`transitions.${transitionId}.skippedAt`] = new Date().toISOString()
+  }
+  await updateDoc(doc(db, 'trips', trip.id), data)
+}
+
+// Step back one stop (mistake fix). Keeps the transition's check state so
+// re-advancing doesn't force re-checking everything.
+export async function stepBackTripStop(trip: Trip) {
+  const prev = Math.max((trip.currentStop ?? 0) - 1, 0)
+  await updateDoc(doc(db, 'trips', trip.id), { currentStop: prev })
+}
+
 // ── Checklists ────────────────────────────────────────────────────────────────
 
 export function subscribeChecklists(tripId: string, cb: (lists: Checklist[]) => void) {
@@ -685,80 +977,12 @@ export async function copyItemToChecklist(
 // separate from any hand-made day-of packing list so the two don't mix.
 export const RV_CHECKLIST_NAME = 'Spmkt->Truck'
 
-// Find the trip's "Spmkt->Truck" checklist (phase pre_dayof), creating it if
-// none exists yet. This is the landing list for the "bring to RV" rule (§8).
-async function findOrCreateRvChecklist(tripId: string): Promise<string> {
-  const snap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
-  const existing = snap.docs.find(
-    (d) =>
-      (d.data().phase as ChecklistPhase) === 'pre_dayof' &&
-      ((d.data().name as string) ?? '').trim().toLowerCase() === RV_CHECKLIST_NAME.toLowerCase(),
-  )
-  if (existing) return existing.id
-  const order = snap.docs.filter((d) => d.data().phase === 'pre_dayof').length
-  const ref = await addDoc(collection(db, 'trips', tripId, 'checklists'), {
-    tripId,
-    name: RV_CHECKLIST_NAME,
-    phase: 'pre_dayof' as const,
-    order,
-  })
-  return ref.id
-}
-
-// Copy a grocery item into the trip's "Spmkt->Truck" (Day of departure)
-// checklist, creating that checklist if needed (the "bring to RV" rule, §8).
-async function copyGroceryItemToRv(
-  tripId: string,
-  item: { name: string; catalogItemId?: string; qty?: string },
-  identity: UserIdentity,
-) {
-  const rvId = await findOrCreateRvChecklist(tripId)
-  await copyItemToChecklist(tripId, rvId, item, identity)
-}
-
-export const BRING_BACK_CHECKLIST_NAME = 'Bringing back items'
-
-// Find the trip's dedicated "Bringing back items" (pack_down) checklist,
-// creating it if none exists yet. Used by the "bring it back" rule (§18) so a
-// checked item always lands in its own list — never a hand-made pack_down list.
-async function findOrCreatePackDownChecklist(tripId: string): Promise<string> {
-  const snap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
-  const existing = snap.docs.find(
-    (d) =>
-      (d.data().phase as ChecklistPhase) === 'pack_down' &&
-      ((d.data().name as string) ?? '').trim().toLowerCase() ===
-        BRING_BACK_CHECKLIST_NAME.toLowerCase(),
-  )
-  if (existing) return existing.id
-  const order = snap.docs.filter((d) => d.data().phase === 'pack_down').length
-  const ref = await addDoc(collection(db, 'trips', tripId, 'checklists'), {
-    tripId,
-    name: BRING_BACK_CHECKLIST_NAME,
-    phase: 'pack_down' as const,
-    order,
-  })
-  return ref.id
-}
-
-// Remove any same-name item from every Pack down / return (pack_down) checklist
-// of a trip — undoes the "bring it back" copy when the origin item is
-// un-checked (§18).
-async function removeItemFromPackDown(tripId: string, name: string) {
-  const checklistsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
-  const packDown = checklistsSnap.docs.filter((d) => (d.data().phase as ChecklistPhase) === 'pack_down')
-  const target = name.toLowerCase()
-  const batch = writeBatch(db)
-  let found = false
-  for (const cl of packDown) {
-    const itemsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists', cl.id, 'items'))
-    for (const d of itemsSnap.docs) {
-      if (((d.data().name as string) ?? '').toLowerCase() === target) {
-        batch.delete(d.ref)
-        found = true
-      }
-    }
-  }
-  if (found) await batch.commit()
+// An item's effective final destination (§18). The legacy `bringBack` flag
+// reads as destination `home`; an explicit `destination` always wins.
+export function itemDestination(
+  item: Pick<ChecklistItem, 'destination' | 'bringBack'>,
+): ItemDestination | undefined {
+  return item.destination ?? (item.bringBack ? 'home' : undefined)
 }
 
 export async function updateChecklist(tripId: string, checklistId: string, data: Partial<Checklist>) {
@@ -910,22 +1134,10 @@ export async function setChecklistItemChecked(
     }
   }
 
-  if (checked && checklist.phase === 'grocery') {
-    await copyGroceryItemToRv(tripId, item, identity)
-  }
-
-  // "Bring it back" rule (§18): checking off a flagged item copies it into the
-  // trip's Pack down / return list (created if missing); un-checking removes
-  // that copy again. Skip when the item already lives in a pack_down checklist
-  // so it never copies onto itself.
-  if (item.bringBack && checklist.phase !== 'pack_down') {
-    if (checked) {
-      const packDownId = await findOrCreatePackDownChecklist(tripId)
-      await copyItemToChecklist(tripId, packDownId, item, identity)
-    } else {
-      await removeItemFromPackDown(tripId, item.name)
-    }
-  }
+  // NOTE (§20): the old copy-on-check rules (bought grocery → "Spmkt->Truck",
+  // destination-home → "Bringing back items") are retired under the stage-driven
+  // flow — those lists no longer exist; each stop derives its own view from item
+  // destinations instead. Only the Supermarket "bought" sync remains below.
 
   if (item.linkedSupermarketListId && item.linkedSupermarketItemId) {
     const linkedSnap = await getDoc(
@@ -1080,6 +1292,7 @@ export async function addPersistentItem(
     checklistName: rec.checklistName.trim(),
     catalogItemId: rec.catalogItemId || undefined,
     qty: rec.qty || undefined,
+    destination: rec.destination,
     updatedBy: identity,
     updatedAt: new Date().toISOString(),
   }))
@@ -1105,7 +1318,7 @@ export async function setItemPersist(
 ) {
   await updateItem(tripId, checklist.id, item.id, { persist }, identity, item.rev)
   if (persist && !item.checked) {
-    const rec = { name: item.name, phase: checklist.phase, checklistName: checklist.name, catalogItemId: item.catalogItemId, qty: item.qty }
+    const rec = { name: item.name, phase: checklist.phase, checklistName: checklist.name, catalogItemId: item.catalogItemId, qty: item.qty, destination: itemDestination(item) }
     await addPersistentItem(rec, identity)
     await pushPersistentItemToTrips(tripId, rec, identity)
   } else if (!persist) {
@@ -1113,27 +1326,30 @@ export async function setItemPersist(
   }
 }
 
-// Toggle the "bring it back" flag on an item (§18). When set, checking the item
-// off later copies it into the trip's Pack down / return list; see
-// setChecklistItemChecked. If the item is *already* checked when the flag is
-// toggled, reconcile the Pack down copy immediately — enabling copies it in,
-// disabling removes it — so flag order and check order don't matter.
-export async function setItemBringBack(
+// Set an item's final destination (§18): Home / Truck / RV. Destination `home`
+// means "must come back" — checking the item later copies it into the trip's
+// Pack down / return list (see setChecklistItemChecked). If the item is
+// *already* checked when the destination changes, reconcile the Pack down copy
+// immediately — switching to `home` copies it in, switching away removes it —
+// so destination order and check order don't matter. Clears the legacy
+// `bringBack` flag so `destination` is the single source going forward.
+export async function setItemDestination(
   tripId: string,
   checklist: Checklist,
   item: ChecklistItem,
-  bringBack: boolean,
+  destination: ItemDestination,
   identity: UserIdentity,
 ) {
-  await updateItem(tripId, checklist.id, item.id, { bringBack }, identity, item.rev)
-
-  if (item.checked && checklist.phase !== 'pack_down') {
-    if (bringBack) {
-      const packDownId = await findOrCreatePackDownChecklist(tripId)
-      await copyItemToChecklist(tripId, packDownId, item, identity)
-    } else {
-      await removeItemFromPackDown(tripId, item.name)
-    }
+  // Under the stage-driven flow (§20) destination is just a per-item property
+  // the stop views derive from; changing it no longer copies anything.
+  await updateItem(tripId, checklist.id, item.id, { destination, bringBack: false }, identity, item.rev)
+  // If the item is pinned (persist), remember the new destination on the global
+  // recurring record too, so future trips seed it with the same destination (§12/§18).
+  if (item.persist && !item.checked) {
+    await addPersistentItem(
+      { name: item.name, phase: checklist.phase, checklistName: checklist.name, catalogItemId: item.catalogItemId, qty: item.qty, destination },
+      identity,
+    )
   }
 }
 
@@ -1189,6 +1405,7 @@ export async function createTripWithChecklists(
         catalogItemId: item.catalogItemId || undefined,
         name: item.name,
         qty: item.qty ?? '',
+        destination: item.destination,
         checked: false,
         order: idx,
         rev: 1,
@@ -1202,6 +1419,8 @@ export async function createTripWithChecklists(
   }
 
   await seedPersistentItems(tripId, created, identity)
+  // Two-list model (§20): funnel all seeded non-grocery lists into "Other".
+  await collapseTripToOther(tripId)
   return tripId
 }
 
@@ -1246,6 +1465,7 @@ async function seedPersistentItems(
       catalogItemId: rec.catalogItemId || undefined,
       name: rec.name,
       qty: rec.qty ?? '',
+      destination: rec.destination,
       checked: false,
       persist: true,
       order: existing.size,
@@ -1667,24 +1887,24 @@ export async function linkSupermarketItemToTrip(
   let tripItemId: string
   if (existing) {
     tripItemId = existing.id
+    // Camping groceries ride in the truck to camp — set the destination (§18),
+    // unless the user already picked one on this item.
+    const existingDest = itemDestination(docData<ChecklistItem>(existing))
     await updateItem(target.id, checklistId, existing.id, {
       linkedSupermarketListId: list.id, linkedSupermarketItemId: fresh.id,
+      ...(existingDest ? {} : { destination: 'truck' as const }),
     }, identity, (existing.data().rev as number) ?? 0)
-    if (fresh.checked && !(existing.data().checked as boolean)) {
-      await copyGroceryItemToRv(target.id, fresh, identity)
-    }
   } else {
     const ref = await addItem(
       target.id, checklistId,
       clean({
         catalogItemId: fresh.catalogItemId, name: fresh.name, qty: fresh.qty || '1',
-        checked: fresh.checked, order: itemsSnap.size,
+        checked: fresh.checked, order: itemsSnap.size, destination: 'truck' as const,
         linkedSupermarketListId: list.id, linkedSupermarketItemId: fresh.id,
       }) as Omit<ChecklistItem, 'id' | 'tripId' | 'checklistId'>,
       identity,
     )
     tripItemId = ref.id
-    if (fresh.checked) await copyGroceryItemToRv(target.id, fresh, identity)
   }
 
   await updateSupermarketItem(

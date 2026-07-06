@@ -4,7 +4,7 @@ import { AuthGate } from '@/auth/AuthGate'
 import {
   backfillCatalogFromItems, dedupeCatalog, syncTripStatuses,
   ensureDefaultStores, migrateSupermarketListsToStoreIds, migrateGroceryChecklistsToStoreIds,
-  migrateGroceryRvItemsToSpmktList,
+  migrateGroceryRvItemsToSpmktList, ensureDefaultProcedures, migratePhasesToOther,
 } from '@/lib/firestore'
 import { useTrips } from '@/hooks/useFirestore'
 import { useAppStore } from '@/lib/store'
@@ -21,6 +21,7 @@ const AmenitiesPage = lazy(() => import('@/features/manage/AmenitiesPage').then(
 const StoresPage = lazy(() => import('@/features/manage/StoresPage').then(m => ({ default: m.StoresPage })))
 const CatalogPage = lazy(() => import('@/features/manage/CatalogPage').then(m => ({ default: m.CatalogPage })))
 const FeedbackPage = lazy(() => import('@/features/manage/FeedbackPage').then(m => ({ default: m.FeedbackPage })))
+const ProceduresPage = lazy(() => import('@/features/manage/ProceduresPage').then(m => ({ default: m.ProceduresPage })))
 
 // Keeps the global catalog clean and complete, once per device: removes any
 // duplicate-name entries, then seeds names from items already in lists.
@@ -50,12 +51,19 @@ function StoreSync() {
     ;(async () => {
       try {
         await ensureDefaultStores()
+        // Seeds only the transition procedures that don't exist yet (§20).
+        await ensureDefaultProcedures()
         await migrateSupermarketListsToStoreIds()
         await migrateGroceryChecklistsToStoreIds()
         // Heavy (reads every item) — run once per device rather than every load.
         if (!localStorage.getItem('migratedGroceryRvItems')) {
           await migrateGroceryRvItemsToSpmktList()
           localStorage.setItem('migratedGroceryRvItems', '1')
+        }
+        // Collapse the four phase sections into Groceries + Other (§20).
+        if (!localStorage.getItem('migratedPhasesToOther')) {
+          await migratePhasesToOther()
+          localStorage.setItem('migratedPhasesToOther', '1')
         }
       } catch {
         /* non-critical — will retry next load */
@@ -107,6 +115,7 @@ export default function App() {
             <Route path="/manage/stores" element={<StoresPage />} />
             <Route path="/manage/catalog" element={<CatalogPage />} />
             <Route path="/manage/feedback" element={<FeedbackPage />} />
+            <Route path="/manage/procedures" element={<ProceduresPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

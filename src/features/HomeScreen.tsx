@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/lib/store'
-import { useTrips, useChecklists, useChecklistItems } from '@/hooks/useFirestore'
-import { findNextOrActiveTrip } from '@/lib/firestore'
+import { useTrips, useChecklists, useChecklistItems, useProcedures } from '@/hooks/useFirestore'
+import { findNextOrActiveTrip, TRIP_STOPS, STOP_PROCEDURE, PROCEDURE_LABELS } from '@/lib/firestore'
 import { Progress } from '@/components/ui/progress'
-import { Tent, Settings, Users, Plus, ChevronRight, CalendarDays, CheckCircle2, ListChecks } from 'lucide-react'
+import { Tent, Settings, Users, Plus, ChevronRight, CalendarDays, CheckCircle2, ListChecks, MapPin, ShieldAlert, ShieldCheck } from 'lucide-react'
 import type { Trip, Checklist } from '@/types'
 
 const PHASE_ORDER = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
@@ -61,6 +61,35 @@ function ChecklistRow({
   )
 }
 
+// "Right now" line (§20): where on the route the trip is and how many safety
+// checks stand between here and the next stop. Shown once the trip is active
+// or the crew has started moving.
+function RouteNowLine({ trip }: { trip: Trip }) {
+  const procedures = useProcedures()
+  const stop = Math.min(Math.max(trip.currentStop ?? 0, 0), TRIP_STOPS.length - 1)
+  if (trip.status !== 'active' && stop === 0) return null
+  const atEnd = stop === TRIP_STOPS.length - 1
+  const transitionId = STOP_PROCEDURE[stop]!
+  const steps = procedures.find(p => p.id === transitionId)?.steps ?? []
+  const checked = new Set(trip.transitions?.[transitionId]?.checked ?? [])
+  const pendingCount = steps.filter(s => !checked.has(s.id)).length
+  return (
+    <div className="flex items-center gap-1.5 text-sm text-gray-500 mt-1">
+      <MapPin className="w-4 h-4 shrink-0" />
+      <span className="truncate">
+        At {TRIP_STOPS[stop]} · {atEnd ? 'finish' : 'next'}: {PROCEDURE_LABELS[transitionId].toLowerCase()}
+      </span>
+      {pendingCount > 0 ? (
+        <span className="flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full shrink-0">
+          <ShieldAlert className="w-3.5 h-3.5" /> {pendingCount}
+        </span>
+      ) : steps.length > 0 ? (
+        <ShieldCheck className="w-4 h-4 text-[#2f6b4f] shrink-0" />
+      ) : null}
+    </div>
+  )
+}
+
 function NextTripCard({ trip }: { trip: Trip }) {
   const navigate = useNavigate()
   const checklists = useChecklists(trip.id)
@@ -90,6 +119,7 @@ function NextTripCard({ trip }: { trip: Trip }) {
           <CalendarDays className="w-4 h-4" />
           <span>{formatDate(trip.startDate)} — {formatDate(trip.endDate)}</span>
         </div>
+        <RouteNowLine trip={trip} />
         <div className="mt-4">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-sm font-medium text-gray-700">

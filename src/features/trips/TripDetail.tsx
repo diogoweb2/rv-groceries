@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useTrips, useChecklists, useAmenities, useOrdering, useStores } from '@/hooks/useFirestore'
-import { updateTrip, deleteTrip, completeTrip, addChecklist, savePhaseOrder, saveChecklistOrder, saveChecklistPositions, rateTrip, getTripChecklistsWithItems } from '@/lib/firestore'
+import { useTrips, useChecklists, useAmenities, useOrdering, useStores, useProcedures } from '@/hooks/useFirestore'
+import { updateTrip, deleteTrip, completeTrip, addChecklist, savePhaseOrder, saveChecklistOrder, saveChecklistPositions, rateTrip, getTripChecklistsWithItems, findOrCreateOtherChecklist, TRIP_STOPS } from '@/lib/firestore'
 import { printLists, type PrintList } from '@/lib/print'
 import { useAppStore } from '@/lib/store'
 import { ChecklistCard } from './ChecklistCard'
 import { AddItemSheet } from './AddItemSheet'
+import { TripStepper } from './TripStepper'
+import { StageView } from './StageView'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,25 +23,21 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import type { Trip, ChecklistPhase, Checklist } from '@/types'
 
-const PHASES: { value: ChecklistPhase; label: string }[] = [
-  { value: 'pre_early', label: 'Before the trip' },
-  { value: 'pre_dayof', label: 'Day of departure' },
-  { value: 'pack_down', label: 'Pack down / return' },
-  { value: 'grocery', label: 'Groceries' },
-]
-
+// Two-list model (§20): only Groceries (per store) and a single Other list.
 const PHASE_LABELS: Record<string, string> = {
+  grocery: 'Groceries',
+  other: 'Other',
   pre_early: 'Before the trip',
   pre_dayof: 'Day of departure',
   pack_down: 'Pack down / return',
-  grocery: 'Groceries',
 }
 
 const PHASE_ICONS: Record<string, LucideIcon> = {
+  grocery: ShoppingCart,
+  other: Backpack,
   pre_early: Backpack,
   pre_dayof: Truck,
   pack_down: PackageOpen,
-  grocery: ShoppingCart,
 }
 
 const STATUS_BADGE: Record<Trip['status'], { label: string; variant: 'default' | 'success' | 'warning' | 'info' }> = {
@@ -169,6 +167,14 @@ export function TripDetail() {
   const [pendingRating, setPendingRating] = useState(0)
   const [showHidden, setShowHidden] = useState(false)
   const [pickingList, setPickingList] = useState(false)
+  const procedures = useProcedures()
+
+  // Every trip needs its single Other list to add non-grocery items into (§20).
+  useEffect(() => {
+    if (id && checklists.length > 0 && !checklists.some(c => c.phase === 'other')) {
+      findOrCreateOtherChecklist(id)
+    }
+  }, [id, checklists])
 
   const trip = trips.find(t => t.id === id)
   if (!trip) return (
@@ -316,8 +322,14 @@ export function TripDetail() {
     return acc
   }, {})
 
-  // Phase sections to show, in the remembered order (only non-empty ones).
-  const visiblePhases = ordering.phaseOrder.filter(p => byPhase[p]?.length)
+  // Phase sections to show (only non-empty ones). Two-list model puts Other and
+  // Groceries first; legacy phases only linger until migration collapses them.
+  const phaseRenderOrder = Array.from(new Set<string>([
+    'other', 'grocery', ...ordering.phaseOrder, 'pre_early', 'pre_dayof', 'pack_down',
+  ]))
+  const visiblePhases = phaseRenderOrder.filter(p => byPhase[p]?.length) as ChecklistPhase[]
+
+  const stop = Math.min(Math.max(currentTrip.currentStop ?? 0, 0), TRIP_STOPS.length - 1)
 
   // Stores that don't already have a grocery checklist in this trip.
   const usedGroceryStoreIds = new Set((byPhase.grocery ?? []).map(c => c.storeId).filter(Boolean))
@@ -417,10 +429,10 @@ export function TripDetail() {
             <Plus className="w-4 h-4" /> Add item
           </button>
           <button
-            onClick={() => setNewChecklist({ name: '', phase: 'pre_early' })}
+            onClick={() => setNewChecklist({ name: '', phase: 'grocery' })}
             className="flex items-center gap-1 text-sm font-medium text-[#2f6b4f] hover:underline"
           >
-            <Plus className="w-4 h-4" /> Add checklist
+            <Plus className="w-4 h-4" /> Add store list
           </button>
           {hiddenCount > 0 && (
             <button
@@ -440,6 +452,11 @@ export function TripDetail() {
           </div>
         )}
       </div>
+
+      {/* Trip route stepper + transition safety procedures (§20) */}
+      {trip.status !== 'completed' && trip.status !== 'cancelled' && (
+        <TripStepper trip={trip} procedures={procedures} onFinished={openRatingDialog} />
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-8 flex flex-col gap-6">
@@ -463,44 +480,46 @@ export function TripDetail() {
           </div>
         )}
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSectionDragEnd}>
-          <SortableContext items={visiblePhases.map(p => `phase:${p}`)} strategy={verticalListSortingStrategy}>
-            <div className="flex flex-col gap-6">
-              {visiblePhases.map(phase => {
-                const phaseLists = byPhase[phase]
-                return (
-                  <SortableSection key={phase} phase={phase} label={PHASE_LABELS[phase] ?? phase}>
-                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCardDragEnd(phase, phaseLists)}>
-                      <SortableContext items={phaseLists.map(c => c.id)} strategy={verticalListSortingStrategy}>
-                        <div className="flex flex-col gap-3">
-                          {phaseLists.map(cl => (
-                            <SortableChecklist
-                              key={cl.id}
-                              checklist={cl}
-                              tripId={id!}
-                              onAddItem={() => setAddingTo(cl.id)}
-                            />
-                          ))}
-                        </div>
-                      </SortableContext>
-                    </DndContext>
-                  </SortableSection>
-                )
-              })}
-            </div>
-          </SortableContext>
-        </DndContext>
+        {/* Stop 0 (Home) is the editable packing view: the Groceries + Other
+            lists. Every later stop shows the derived, per-stop stage view (§20). */}
+        {stop === 0 ? (
+          <>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSectionDragEnd}>
+              <SortableContext items={visiblePhases.map(p => `phase:${p}`)} strategy={verticalListSortingStrategy}>
+                <div className="flex flex-col gap-6">
+                  {visiblePhases.map(phase => {
+                    const phaseLists = byPhase[phase]
+                    return (
+                      <SortableSection key={phase} phase={phase} label={PHASE_LABELS[phase] ?? phase}>
+                        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCardDragEnd(phase, phaseLists)}>
+                          <SortableContext items={phaseLists.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                            <div className="flex flex-col gap-3">
+                              {phaseLists.map(cl => (
+                                <SortableChecklist
+                                  key={cl.id}
+                                  checklist={cl}
+                                  tripId={id!}
+                                  onAddItem={() => setAddingTo(cl.id)}
+                                />
+                              ))}
+                            </div>
+                          </SortableContext>
+                        </DndContext>
+                      </SortableSection>
+                    )
+                  })}
+                </div>
+              </SortableContext>
+            </DndContext>
 
-        {checklists.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-            <p className="text-base font-medium">No checklists yet</p>
-            <button
-              onClick={() => setNewChecklist({ name: '', phase: 'pre_early' })}
-              className="mt-3 flex items-center gap-2 text-sm font-medium text-[#2f6b4f]"
-            >
-              <Plus className="w-4 h-4" /> Add a checklist
-            </button>
-          </div>
+            {checklists.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <p className="text-base font-medium">No lists yet</p>
+              </div>
+            )}
+          </>
+        ) : (
+          <StageView trip={currentTrip} checklists={checklists.filter(c => !c.hidden)} />
         )}
       </div>
 
@@ -607,56 +626,30 @@ export function TripDetail() {
         </div>
       </Dialog>
 
-      {/* New checklist dialog */}
-      <Dialog open={!!newChecklist} onClose={() => setNewChecklist(null)} title="New checklist">
+      {/* New store list dialog (§20: the only lists you create are per-store
+          Groceries; the single Other list is automatic). */}
+      <Dialog open={!!newChecklist} onClose={() => setNewChecklist(null)} title="New store list">
         {newChecklist && (
           <div className="flex flex-col gap-4">
-            {newChecklist.phase === 'grocery' ? (
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Store</label>
-                <div className="flex flex-col gap-2">
-                  {availableGroceryStores.map(s => (
-                    <button
-                      key={s.id}
-                      onClick={() => setNewChecklist({ ...newChecklist, name: s.name, storeId: s.id })}
-                      className={`text-left py-2.5 px-3 rounded-xl text-sm font-medium border-2 transition-colors ${newChecklist.storeId === s.id ? 'border-[#2f6b4f] bg-[#2f6b4f] text-white' : 'border-gray-200 text-gray-600'}`}
-                    >
-                      {s.name}
-                    </button>
-                  ))}
-                  {availableGroceryStores.length === 0 && (
-                    <p className="text-sm text-gray-500">
-                      {stores.length === 0
-                        ? 'No stores yet. Add one in Manage → Stores.'
-                        : 'Every store already has a grocery list on this trip.'}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1.5 block">Name</label>
-                <Input
-                  value={newChecklist.name}
-                  onChange={e => setNewChecklist({ ...newChecklist, name: e.target.value })}
-                  placeholder="e.g. Kitchen gear"
-                  autoFocus
-                  onKeyDown={e => e.key === 'Enter' && handleAddChecklist()}
-                />
-              </div>
-            )}
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Section</label>
-              <div className="grid grid-cols-2 gap-2">
-                {PHASES.map(p => (
+              <label className="text-sm font-medium text-gray-700 mb-2 block">Store</label>
+              <div className="flex flex-col gap-2">
+                {availableGroceryStores.map(s => (
                   <button
-                    key={p.value}
-                    onClick={() => setNewChecklist({ ...newChecklist, phase: p.value, name: '', storeId: undefined })}
-                    className={`py-2.5 px-3 rounded-xl text-sm font-medium border-2 transition-colors ${newChecklist.phase === p.value ? 'border-[#2f6b4f] bg-[#2f6b4f] text-white' : 'border-gray-200 text-gray-600'}`}
+                    key={s.id}
+                    onClick={() => setNewChecklist({ ...newChecklist, name: s.name, storeId: s.id })}
+                    className={`text-left py-2.5 px-3 rounded-xl text-sm font-medium border-2 transition-colors ${newChecklist.storeId === s.id ? 'border-[#2f6b4f] bg-[#2f6b4f] text-white' : 'border-gray-200 text-gray-600'}`}
                   >
-                    {p.label}
+                    {s.name}
                   </button>
                 ))}
+                {availableGroceryStores.length === 0 && (
+                  <p className="text-sm text-gray-500">
+                    {stores.length === 0
+                      ? 'No stores yet. Add one in Manage → Stores.'
+                      : 'Every store already has a grocery list on this trip.'}
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex gap-2 pt-2">

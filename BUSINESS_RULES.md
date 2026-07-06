@@ -105,6 +105,11 @@ The Home screen focuses on a single trip, chosen in this priority:
 
 ## 5. Checklists
 
+> **Superseded by §20.** The four phase sections and their drag-reorder/hide/pin machinery
+> below describe the legacy model. The live model has only **Groceries (per store)** + a
+> single **Other** list, shown through the stage-driven trip view. Much of this section is
+> retained for history; where it conflicts with §20, §20 wins.
+
 - A checklist belongs to a trip and has a **phase**: `pre_early` (Before the trip),
   `pre_dayof` (Day of departure), `pack_down` (Pack down / return), `grocery` (Groceries).
 - Checklists are grouped into phase **sections** and displayed in the **remembered phase
@@ -157,8 +162,8 @@ The Home screen focuses on a single trip, chosen in this priority:
 ## 6. Items & Suggestions
 
 - A checklist/grocery item has: name, optional quantity, optional linked catalog item,
-  optional store, checked state, order, an optional **persist** flag (see §12), and
-  authorship/revision fields.
+  optional store, checked state, order, an optional **persist** flag (see §12), an optional
+  **final destination** (Home / Truck / RV, see §18), and authorship/revision fields.
 - **Add by Enter.** In the add flows, pressing Enter adds the item immediately and keeps the
   input ready for the next one (no forced click).
 - **Catalog match.** When adding by name, if the name exactly matches a catalog item, the new
@@ -220,7 +225,9 @@ The `itemCatalog` collection is the **single global source** for item autocomple
     was created — it does not retarget if a different trip later becomes next/active.
   - Deleting a whole checklist or trip does **not** cascade to Supermarket (only per-item
     add/check/qty/delete actions propagate); any linked Supermarket items are left as-is.
-- **Checked → copy to RV.** When a grocery item is **checked** (bought) — whether directly in
+- **Checked → copy to RV** *(retired by §20 — the "Spmkt->Truck" list no longer exists; bought
+  groceries simply appear in the stage views by their destination. The rule below is history.)*
+  When a grocery item is **checked** (bought) — whether directly in
   the trip, or via its linked Supermarket item — it is automatically **copied** into the trip's
   **Day of departure** (`pre_dayof`) checklist — the "bring to RV" list.
   - The target is a dedicated **"Spmkt->Truck"** checklist in the `pre_dayof` phase, **created
@@ -272,6 +279,7 @@ The `itemCatalog` collection is the **single global source** for item autocomple
   changes what's available in both Groceries and Supermarket going forward.
 - **Saved items (catalog)** — see §7.
 - **Bugs & ideas** — a sortable log of bug reports and improvement ideas (§17).
+- **Safety checklists** — the shared per-transition safety procedures reused by every trip (§20).
 
 ## 12. Persistent (recurring) items
 
@@ -296,6 +304,10 @@ A persistent item carries over to **future** trips so the user doesn't have to r
 - **Scope.** The recurring set is **global** (a shared `persistentItems` collection), not tied
   to a specific trip or to trip ordering. Deleting a pinned item also removes it from the set.
 - Carried items arrive **unchecked** and remain pinned in the new trip.
+- **Remembered final destination.** The recurring record stores the item's final destination
+  (Home / Truck / RV, §18) so carried copies seed with the same destination. It is captured
+  when the item is pinned and **kept in sync**: changing a pinned, unchecked item's destination
+  updates the global record too, so the latest destination is what future trips inherit.
 
 ## 13. Pinned Checklists (auto-create on new trip)
 
@@ -384,9 +396,12 @@ supermarket.
   camping**, either by a per-item tent toggle or by the shorthand **`<name> -> camping`** (also
   `→ camping`) when adding — the suffix is stripped and the item is flagged.
   - Flagging an item **mirrors it** into the next/active trip's Groceries checklist for this
-    store (creating that checklist if the trip doesn't have one yet for this store). No-op if
-    there's no eligible trip (active trip, else soonest upcoming non-cancelled/non-completed
-    one). Un-flagging removes the mirrored copy from the trip but leaves the item in Supermarket.
+    store (creating that checklist if the trip doesn't have one yet for this store). The
+    mirrored trip item is given the **Truck** final destination (§18) automatically — camping
+    groceries ride in the truck to camp — unless a same-name trip item it adopts already has a
+    destination set, which is left untouched. No-op if there's no eligible trip (active trip,
+    else soonest upcoming non-cancelled/non-completed one). Un-flagging removes the mirrored
+    copy from the trip but leaves the item in Supermarket.
   - Once mirrored, the Supermarket item and the trip item are the same entry: checking, quantity
     changes, and deletion on either side apply to both (§8).
   - Checking a camping-flagged item bought copies it into the trip's **"Spmkt->Truck"**
@@ -459,37 +474,49 @@ A shared, sortable to-do list for logging bugs and improvement ideas, reached fr
 - **Authorship.** Each entry records the identity that created it (`createdBy`) and a
   creation timestamp.
 
-## 18. "Bring it back" items (auto-copy to Pack down / return)
+## 18. Item final destination (Home / Truck / RV)
 
-Any checklist item (outside the Pack down / return phase) can be flagged **"bring it
-back"** via a per-item toggle (a return/undo icon on the item row, next to the persist
-pin). It is a reminder to make sure something you took on the trip comes home again.
+> **Updated by §20.** Destination is now the core driver of the stage-driven flow: each stop
+> derives its view by filtering/grouping items on destination. The old **copy-on-check into
+> "Bringing back items"** (and the grocery copy into "Spmkt->Truck", §8) is **retired** —
+> those lists no longer exist. The paragraphs below about auto-copy no longer apply; the
+> destination property, the required add-time step, and the tap-to-cycle row icon all remain.
 
-- **Copy on check.** When a "bring it back" item is **checked off**, it is automatically
-  **copied** into the trip's **Pack down / return** (`pack_down`) checklist — so it shows up
-  (unchecked) as something to account for when packing down. Checking it means "I've got the
-  wallet" in the origin list; the copy in Pack down is the "did it come back?" reminder.
+Every checklist item can carry a **final destination** — **Home**, **Truck**, or **RV** —
+answering "where does this thing belong when the trip is over?". Destination **Home** means
+the item must come back home; it supersedes the old "bring it back" flag (legacy
+`bringBack: true` items read as destination Home until a destination is set).
+
+- **Set at add time (2-step flow, required).** Adding an item in the Add-item sheet is a
+  two-step flow: after the user creates or picks an item, a follow-up screen asks for its
+  final destination — **Home** ("comes camping, must come back home"), **Truck** ("stays in
+  the truck"), or **RV** ("stays in the RV"). There is **no skip** and no pin option here
+  (pinning to future trips, §12, is done later on the item row). Choosing returns to the
+  search field for the next item.
+- **Row icon, tap to cycle.** Each item row shows its destination as an icon (house / truck
+  / caravan; a gray map-pin when unset, e.g. old items). Tapping the icon **cycles**
+  Home → Truck → RV, so the destination can be changed at any time. Shown in every phase.
+- **Copy on check (destination Home).** When a destination-**Home** item is **checked off**,
+  it is automatically **copied** into the trip's **Pack down / return** (`pack_down`)
+  checklist — so it shows up (unchecked) as something to account for when packing down.
+  Truck/RV items are never copied (they stay where they are). Grocery checklists are
+  excluded — bought groceries follow their own copy-to-"Spmkt->Truck" rule (§8) and don't
+  flood Pack down. Items already in a `pack_down` checklist never copy onto themselves.
 - **Target list, created if missing.** The copy always lands in a dedicated
   **"Bringing back items"** checklist in the `pack_down` phase, **created automatically** the
-  first time a bring-back item is checked (so copies stay separate from any hand-made Pack down
-  list). It is never routed into an unrelated pack_down checklist.
+  first time one is needed. It is never routed into an unrelated pack_down checklist.
 - **Copy, not move.** The item stays (checked) in its origin list and appears (unchecked) in
   Pack down.
 - **Un-check removes the copy.** Un-checking the origin item removes the matching (same-name)
   entry from the trip's Pack down / return checklist(s), so a mistaken check is fully undone.
-- **Flag order doesn't matter.** Toggling the "bring it back" flag on an item that is
-  **already checked** reconciles the Pack down copy immediately: enabling the flag copies it in,
-  disabling removes it. So it works whether you check first then flag, or flag first then check.
+- **Change order doesn't matter.** Changing the destination of an item that is **already
+  checked** reconciles the Pack down copy immediately: switching to Home copies it in,
+  switching away removes it.
 - **No duplicates.** The copy is skipped if an item with the same name already exists in the
   Pack down checklist (idempotent; re-checking never duplicates).
-- **Scope.** The flag is a per-item property (`bringBack`); it does not carry to future trips
-  and is independent of the persist pin (§12). The toggle is hidden on items that already
-  live in a `pack_down` checklist (nothing to copy them into).
-- **Set at add time (2-step flow).** Adding an item in the Add-item sheet is a two-step flow:
-  after the user creates or picks an item, a follow-up screen offers three choices for that item —
-  **Bring every trip** (sets the persist flag, §12), **Bring back** (sets `bringBack`), or
-  **SKIP** (no flag). Choosing any of the three returns to the search field for the next item.
-  The **Bring back** option is hidden when adding into a `pack_down` checklist.
+- **Carries forward.** Destination is part of the item and travels with it: pinned-checklist
+  snapshots (§13) and persistent items (§12) remember it, so items seeded into new trips
+  arrive with their destination already set.
 
 ## 19. Printing checklists
 
@@ -512,13 +539,99 @@ Lists can be printed to paper as a hand-check sheet.
 - Printing renders into a hidden document and opens the browser's native print dialog; it
   never changes any data.
 
+## 20. Stage-driven trip flow (route stops, per-stop views, safety procedures)
+
+This is the primary model for the trip screen and **supersedes the four-phase model**.
+See `STAGE_FLOW_SPEC.md` for the design rationale.
+
+### The two-list model
+
+- A trip has only two kinds of lists: **Groceries** (one per store, unchanged) and a single
+  **Other** list for everything else. The old phase sections (Before the trip / Day of
+  departure / Pack down / Groceries) are gone; internally only the `grocery` and `other`
+  checklist phases are used.
+- **Migration.** On load, each trip's legacy `pre_early`/`pre_dayof`/`pack_down` checklists
+  (including the retired auto-lists "Spmkt->Truck" and "Bringing back items") are collapsed:
+  their items move into the single Other list and the emptied checklists are deleted.
+  New trips are collapsed the same way after seeding, and always have an Other list.
+- **Adding.** Every item is added with the Add-item sheet's required **final destination**
+  step (§18). The only lists you can create are per-store Groceries ("Add store list"); the
+  Other list is automatic.
+
+### The route
+
+Fixed **stops**: **Home → Warehouse → Campsite → Warehouse → Home** (index 0–4). The trip
+detail page shows a **route stepper**; `currentStop` lives on the trip (shared live between
+Diogo and Alice). Advancing is **manual** (no date/time automation); a **Back** link steps
+back one stop without losing check state. New trips start at Home (0).
+
+### What each stop shows
+
+- **Stop 0 — Home (departure):** the editable **Groceries + Other** lists (add items, set
+  destinations, qty, pin, delete). This is the packing pass — check items as they go into the
+  truck. Then the *Leaving home* safety checklist to advance.
+- **Stop 1 — Warehouse (GO):** **safety checklist only** (moving food truck→RV here is
+  obvious; no item list).
+- **Stop 2 — Campsite (leaving):** a derived **stow** checklist of all items, grouped by
+  where each goes — **RV** or **Truck**. An item whose destination is **Home is shown as
+  Truck** here (it must ride in the truck to get home). Check = stowed. Then the *Leaving the
+  campsite* safety checklist.
+- **Stop 3 — Warehouse (return):** derived view of items to sort between **RV** and **Truck**
+  (Home again shown as Truck). Then the *Leaving the warehouse (heading home)* safety checklist.
+- **Stop 4 — Home (arrival):** derived **bring-inside** checklist of **destination-Home**
+  items only. Then the **final** *Arriving home* safety checklist, whose **Finish trip**
+  action marks the trip complete and opens the **star rating** prompt (§14).
+
+**Complete for the whole trip.** Each item row (at the Home stop) has a **Complete** action
+(the circle-check icon that replaced the row's trash). Completing sets a trip-wide `completed`
+flag *and* checks the item, and sinks it to the bottom of its list. A **completed item is
+hidden from every stop's derived view** — once you're done with something, it stops
+reappearing at the campsite, warehouse, or arrival. Completion is independent of the persist
+pin: **a pinned item that's completed still recurs on the next trip** (completion deliberately
+doesn't remove it from the recurring set, §12). Completing does not propagate to Supermarket
+(it's trip-management, not "bought"). A completed row can be re-opened (toggle it off) or, once
+completed, **deleted** (the trash appears only then).
+
+**Per-stop, independent completion.** Each item is checked **independently at each stop**
+(`stagesDone` = the stop indices it's been handled at). Checking it at one stop does not
+check it at another. Item destination (§18) is what every derived view filters and groups by;
+the displayed icon is remapped Home→Truck at stops 2 and 3 (stored destination unchanged).
+
+### Safety procedures
+
+- **Five checklists**, one per stop's transition: `leave_home`, `leave_warehouse_go`,
+  `leave_campsite`, `leave_warehouse_return`, and the terminal `arrive_home`. Each is a
+  global, shared template (`procedures` collection); defaults are seeded once (only for ids
+  with no doc yet, so edits are never overwritten). Default steps:
+  - *Leaving home:* (empty — user-defined)
+  - *Leaving the warehouse (GO):* battery connected, hitch pin + chains, lights & brakes,
+    tire pressure, jack raised, mirrors.
+  - *Leaving the campsite:* antenna down, stabilizers up, windows/vents closed, tanks
+    emptied, propane closed, walk-around.
+  - *Leaving the warehouse (heading home):* **battery disconnected**, trailer aligned,
+    wheels chocked, propane closed, RV locked.
+  - *Arriving home (final checks):* truck unloaded, fridge/cooler emptied, trailer locked.
+- **Editing is global**, in two places: quick add/remove inside a stop's dialog, and the full
+  editor at **Manage → Safety checklists** (one section per checklist, incl. *Arriving home*),
+  with add, rename, delete (confirmed), and drag-and-drop reorder. Renaming/reordering
+  preserves step identity, so per-trip check state is unaffected.
+- **Per-trip check state** on the trip document, per procedure id, synced live and reset each
+  trip. (The warehouse is visited twice via two distinct ids, each with its own state.)
+- **Interrupt on advance/finish (blocking-ish).** Opening the dialog, advancing/finishing is
+  enabled only once every step is checked; with steps pending the only way through is an
+  explicit **Skip (N)** (confirmed), which records the skipped step ids + timestamp. Advancing
+  records who/when. Never a hard lock.
+- **Home dashboard.** Once a trip is active (or moving), the Home trip card shows a "right
+  now" line: current stop, the next/finish procedure, and its pending-check count.
+
 ---
 
-### Glossary of phases
+### Glossary of checklist phases
 
-| Phase       | Label                |
-|-------------|----------------------|
-| `pre_early` | Before the trip      |
-| `pre_dayof` | Day of departure     |
-| `pack_down` | Pack down / return   |
-| `grocery`   | Groceries            |
+| Phase       | Label                 | Status                          |
+|-------------|-----------------------|---------------------------------|
+| `grocery`   | Groceries (per store) | active                          |
+| `other`     | Other                 | active                          |
+| `pre_early` | Before the trip       | legacy — migrated into `other`  |
+| `pre_dayof` | Day of departure      | legacy — migrated into `other`  |
+| `pack_down` | Pack down / return    | legacy — migrated into `other`  |
