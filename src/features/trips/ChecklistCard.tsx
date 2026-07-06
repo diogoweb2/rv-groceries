@@ -4,7 +4,7 @@ import {
   updateChecklist, deleteChecklist, setItemPersist, setItemDestination, itemDestination, setItemCompleted,
   savePinnedChecklist, removePinnedChecklist,
   pushPinnedChecklistToTrips,
-  setChecklistItemChecked, updateChecklistItemAndPropagate, deleteChecklistItemAndPropagate,
+  setChecklistItemChecked, updateChecklistItemAndPropagate,
   unlinkChecklistItemFromSupermarket,
 } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
@@ -107,10 +107,6 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
 
   async function handleCycleDestination(item: ChecklistItem) {
     await setItemDestination(tripId, checklist, item, nextDestination(itemDestination(item)), identity)
-  }
-
-  async function handleDelete(item: ChecklistItem) {
-    await deleteChecklistItemAndPropagate(tripId, checklist, item)
   }
 
   async function handleToggleComplete(item: ChecklistItem) {
@@ -339,7 +335,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
               })()}
 
               {/* Complete for the whole trip (§20): hides it from every later
-                  stop. Delete stays available once completed. */}
+                  stop. Completed items can be hidden via the card menu. */}
               <button
                 onClick={() => handleToggleComplete(item)}
                 aria-label={item.completed ? 'Un-complete (show again this trip)' : 'Complete for the whole trip'}
@@ -348,15 +344,6 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
               >
                 <CircleCheck className="w-5 h-5" />
               </button>
-              {item.completed && (
-                <button
-                  onClick={() => handleDelete(item)}
-                  className="text-gray-300 hover:text-red-400 p-2.5 -m-1"
-                  aria-label="Delete item"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              )}
             </div>
           ))}
 

@@ -589,8 +589,9 @@ hidden from every stop's derived view** — once you're done with something, it 
 reappearing at the campsite, warehouse, or arrival. Completion is independent of the persist
 pin: **a pinned item that's completed still recurs on the next trip** (completion deliberately
 doesn't remove it from the recurring set, §12). Completing does not propagate to Supermarket
-(it's trip-management, not "bought"). A completed row can be re-opened (toggle it off) or, once
-completed, **deleted** (the trash appears only then).
+(it's trip-management, not "bought"). A completed row can be re-opened (toggle it off). There is
+**no per-item delete** — completed items are removed from view via the card's "Hide completed"
+toggle (§5), not a trash button.
 
 **Per-stop, independent completion.** Each item is checked **independently at each stop**
 (`stagesDone` = the stop indices it's been handled at). Checking it at one stop does not
