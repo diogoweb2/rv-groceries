@@ -316,9 +316,13 @@ export function SupermarketDetail() {
   // trip's grocery list for this store — the item stays live-linked
   // afterward (§8/§15).
   async function toggleCamping(item: SupermarketItem) {
+    // Reflect the pin locally right away — the Firestore link/unlink round-trip
+    // is slow, so waiting for the subscription made the toggle feel ~3s laggy.
     if (item.forCamping) {
+      setItems(items.map(i => (i.id === item.id ? { ...i, forCamping: false } : i)))
       await unlinkSupermarketItemFromTrip(item, identity)
     } else if (store) {
+      setItems(items.map(i => (i.id === item.id ? { ...i, forCamping: true } : i)))
       await linkSupermarketItemToTrip(list!, item, store, trips, identity)
     }
   }

@@ -10,18 +10,21 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'favicon-32x32.png', 'favicon-16x16.png', 'apple-touch-icon-180x180.png'],
+      includeAssets: ['favicon.ico', 'favicon.svg', 'favicon-trailer.svg', 'apple-touch-icon-180x180.png'],
       manifest: {
         name: 'RV & Groceries',
         short_name: 'RVList',
         description: 'Offline-first checklists for RV trips and groceries',
-        theme_color: '#1e3a5f',
-        background_color: '#ffffff',
+        theme_color: '#2f6b4f',
+        // Matches the icon's background so the Android splash reads as one scene
+        background_color: '#eaf6f3',
         display: 'standalone',
         orientation: 'portrait',
         icons: [
+          { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {

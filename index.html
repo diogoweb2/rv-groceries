@@ -2,15 +2,50 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon.ico" sizes="any" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon-trailer.svg" type="image/svg+xml" sizes="any" />
     <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>checklist</title>
+    <meta name="theme-color" content="#2f6b4f" />
+    <title>RV & Groceries</title>
+    <style>
+      /* Instant splash shown between the OS splash screen and React mounting.
+         Lives inside #root, so the app replaces it automatically on first render. */
+      #splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        background: linear-gradient(180deg, #eaf6f3 0%, #d3ece1 100%);
+      }
+      #splash img {
+        width: 160px;
+        height: 160px;
+        animation: splash-in 0.5s ease-out;
+      }
+      #splash p {
+        margin: 0;
+        font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+        font-weight: 700;
+        color: #2f6b4f;
+        letter-spacing: 0.02em;
+      }
+      @keyframes splash-in {
+        from { opacity: 0; transform: scale(0.92); }
+        to { opacity: 1; transform: scale(1); }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="splash">
+        <img src="/pwa-192x192.png" alt="" />
+        <p>RV &amp; Groceries</p>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
