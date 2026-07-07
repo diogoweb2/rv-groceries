@@ -4,6 +4,7 @@ import { useAppStore } from '@/lib/store'
 import { useTrips, useChecklists, useChecklistItems, useProcedures } from '@/hooks/useFirestore'
 import { findNextOrActiveTrip, TRIP_STOPS, STOP_PROCEDURE, PROCEDURE_LABELS } from '@/lib/firestore'
 import { Progress } from '@/components/ui/progress'
+import { RigIcon, Campfire, Stars } from '@/components/CampScenes'
 import { Tent, Settings, Users, Plus, ChevronRight, CalendarDays, CheckCircle2, ListChecks, MapPin, ShieldAlert, ShieldCheck } from 'lucide-react'
 import type { Trip, Checklist } from '@/types'
 
@@ -22,6 +23,21 @@ function countdown(trip: Trip): string {
   if (days <= 0) return 'Starts today'
   if (days === 1) return 'Starts tomorrow'
   return `In ${days} days`
+}
+
+// Time-of-day flavor for the hero scene. Night gets stars and a campfire;
+// evening gets a low golden sun; day gets the classic morning sky.
+type DayPeriod = 'day' | 'evening' | 'night'
+function dayPeriod(hour: number): DayPeriod {
+  if (hour >= 21 || hour < 6) return 'night'
+  if (hour >= 17) return 'evening'
+  return 'day'
+}
+
+const TAGLINES: Record<DayPeriod, string> = {
+  day: "Let's get you packed and on the road 🏕️",
+  evening: 'Golden hour at the campsite hits different ✨',
+  night: 'Marshmallow o’clock — the fire’s going 🔥',
 }
 
 // Reports its checked/total counts up to the parent so the card can aggregate.
@@ -107,11 +123,11 @@ function NextTripCard({ trip }: { trip: Trip }) {
   const sorted = [...checklists].sort((a, b) => PHASE_ORDER.indexOf(a.phase) - PHASE_ORDER.indexOf(b.phase))
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="sticker-card overflow-hidden">
       {/* Trip header */}
       <button onClick={() => navigate(`/trips/${trip.id}`)} className="w-full text-left px-5 pt-5 pb-4">
         <div className="flex items-center justify-between gap-2 mb-1">
-          <span className="text-xs font-semibold text-[#2f6b4f] bg-emerald-50 px-2.5 py-1 rounded-full">{countdown(trip)}</span>
+          <span className="text-xs font-bold text-[#2f6b4f] bg-emerald-50 border border-[#2f6b4f]/15 px-2.5 py-1 rounded-full">{countdown(trip)}</span>
           <ChevronRight className="w-5 h-5 text-gray-300" />
         </div>
         <h2 className="text-xl font-bold text-gray-800 truncate">{trip.title}</h2>
@@ -158,14 +174,28 @@ export function HomeScreen() {
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  const period = dayPeriod(hour)
+  const skyClass = period === 'night' ? 'camp-sky-night' : period === 'evening' ? 'camp-sky-evening' : 'camp-sky'
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto bg-[#fbf7f0]">
-      {/* Scenic campsite header */}
-      <div className="camp-sky relative overflow-hidden">
-        {/* Sun */}
-        <div className="absolute right-7 top-9 w-16 h-16 rounded-full bg-amber-200/90 blur-[1px]" />
-        <div className="absolute right-8 top-10 w-14 h-14 rounded-full bg-amber-100" />
+      {/* Scenic campsite header — the sky follows the real time of day */}
+      <div className={`${skyClass} relative overflow-hidden`}>
+        {period === 'night' ? (
+          <>
+            <Stars className="absolute inset-x-0 top-4 w-full h-24" />
+            {/* moon */}
+            <div className="absolute right-8 top-9 w-12 h-12 rounded-full bg-amber-50/90" />
+            <div className="absolute right-6 top-8 w-11 h-11 rounded-full bg-[#16283f]" style={{ clipPath: 'circle(50%)' }} />
+          </>
+        ) : (
+          <>
+            {/* sun (low and warm in the evening) */}
+            <div className={`absolute right-7 rounded-full blur-[1px] ${period === 'evening' ? 'top-20 w-16 h-16 bg-orange-200/90' : 'top-9 w-16 h-16 bg-amber-200/90'}`} />
+            <div className={`absolute right-8 rounded-full ${period === 'evening' ? 'top-[84px] w-14 h-14 bg-orange-100' : 'top-10 w-14 h-14 bg-amber-100'}`} />
+          </>
+        )}
+
         {/* Mountains + pines + tent silhouette */}
         <svg viewBox="0 0 480 140" preserveAspectRatio="none" className="absolute -bottom-px left-0 w-full h-28 text-[#1f4736]" aria-hidden>
           <path d="M0 140 V70 L70 30 L140 78 L210 38 L300 90 L380 50 L480 96 V140 Z" fill="#2c6049" opacity="0.7" />
@@ -183,8 +213,14 @@ export function HomeScreen() {
           </g>
         </svg>
 
+        {/* Rig parked in the scene + campfire at night */}
+        <div className="absolute bottom-1 left-6 flex items-end gap-3 pointer-events-none" aria-hidden>
+          <RigIcon className="w-24 drop-shadow-sm" flip />
+          {period === 'night' && <Campfire className="w-7 h-7 mb-0.5" />}
+        </div>
+
         {/* Top bar */}
-        <div className="relative z-10 flex items-center justify-between px-5 pt-12 pb-24">
+        <div className="relative z-10 flex items-center justify-between px-5 pt-12 pb-28">
           <div>
             <p className="text-emerald-50/90 text-sm flex items-center gap-1.5">
               <Tent className="w-4 h-4" /> {greeting},
@@ -195,7 +231,7 @@ export function HomeScreen() {
                 <Users className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-emerald-50/80 text-xs mt-1">Let's get you packed and on the road 🏕️</p>
+            <p className="text-emerald-50/80 text-xs mt-1">{TAGLINES[period]}</p>
           </div>
           <button onClick={() => navigate('/manage')} className="text-white/90 p-2 rounded-full bg-white/10 backdrop-blur-sm">
             <Settings className="w-6 h-6" />
@@ -207,17 +243,17 @@ export function HomeScreen() {
       <div className="flex-1 bg-[#fbf7f0] rounded-t-3xl -mt-5 px-5 pt-6 pb-6 flex flex-col gap-5">
         {focusTrip ? (
           <div>
-            <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">
+            <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">
               {focusTrip.status === 'active' ? 'Current trip' : 'Next trip'}
             </p>
             <NextTripCard trip={focusTrip} />
           </div>
         ) : (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 flex flex-col items-center text-center">
-            <div className="text-5xl mb-2">⛺</div>
-            <p className="font-semibold text-gray-800">No adventures on the horizon</p>
-            <p className="text-sm text-gray-500 mb-4">Plan your next camping trip to get started.</p>
-            <button onClick={() => navigate('/trips/new')} className="flex items-center gap-2 bg-[#2f6b4f] text-white px-5 py-3 rounded-xl font-semibold">
+          <div className="sticker-card p-8 flex flex-col items-center text-center">
+            <RigIcon className="w-32 mb-3" />
+            <p className="font-bold text-gray-800">No adventures on the horizon</p>
+            <p className="text-sm text-gray-500 mb-4">The trailer's getting dusty — plan your next trip.</p>
+            <button onClick={() => navigate('/trips/new')} className="flex items-center gap-2 bg-[#2f6b4f] text-white px-5 py-3 rounded-xl font-bold">
               <Plus className="w-5 h-5" /> Plan a trip
             </button>
           </div>
@@ -225,19 +261,19 @@ export function HomeScreen() {
 
         {/* Shortcuts */}
         <div>
-          <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Shortcuts</p>
+          <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Shortcuts</p>
           <div className="grid grid-cols-3 gap-3">
-            <button onClick={() => navigate('/trips/new')} className="flex flex-col items-center gap-2 bg-white rounded-2xl border border-gray-100 shadow-sm py-4 active:bg-gray-50">
+            <button onClick={() => navigate('/trips/new')} className="sticker-card flex flex-col items-center gap-2 py-4 active:bg-gray-50">
               <div className="bg-emerald-50 rounded-xl p-2.5"><Plus className="w-5 h-5 text-[#2f6b4f]" /></div>
-              <span className="text-xs font-medium text-gray-700">New trip</span>
+              <span className="text-xs font-semibold text-gray-700">New trip</span>
             </button>
-            <button onClick={() => navigate('/trips')} className="flex flex-col items-center gap-2 bg-white rounded-2xl border border-gray-100 shadow-sm py-4 active:bg-gray-50">
-              <div className="bg-emerald-50 rounded-xl p-2.5"><Tent className="w-5 h-5 text-[#2f6b4f]" /></div>
-              <span className="text-xs font-medium text-gray-700">All trips</span>
+            <button onClick={() => navigate('/trips')} className="sticker-card flex flex-col items-center gap-2 py-4 active:bg-gray-50">
+              <div className="bg-amber-50 rounded-xl p-2.5"><Tent className="w-5 h-5 text-amber-600" /></div>
+              <span className="text-xs font-semibold text-gray-700">All trips</span>
             </button>
-            <button onClick={() => navigate('/manage')} className="flex flex-col items-center gap-2 bg-white rounded-2xl border border-gray-100 shadow-sm py-4 active:bg-gray-50">
-              <div className="bg-emerald-50 rounded-xl p-2.5"><Settings className="w-5 h-5 text-[#2f6b4f]" /></div>
-              <span className="text-xs font-medium text-gray-700">Manage</span>
+            <button onClick={() => navigate('/manage')} className="sticker-card flex flex-col items-center gap-2 py-4 active:bg-gray-50">
+              <div className="bg-sky-50 rounded-xl p-2.5"><Settings className="w-5 h-5 text-sky-700" /></div>
+              <span className="text-xs font-semibold text-gray-700">Manage</span>
             </button>
           </div>
         </div>

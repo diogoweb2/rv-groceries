@@ -5,7 +5,8 @@ import { auth, getMessagingInstance } from '@/lib/firebase'
 import { saveFcmToken } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import type { UserIdentity } from '@/types'
-import { Tent, ShoppingCart, Loader2 } from 'lucide-react'
+import { Tent, Loader2 } from 'lucide-react'
+import { RigIcon, Campfire, Stars } from '@/components/CampScenes'
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string
 
@@ -118,10 +119,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (step === 'done') return <>{children}</>
 
   return (
-    <div className="camp-sky flex flex-col items-center justify-center min-h-dvh px-6 relative overflow-hidden">
-      {/* Decorative sun + hills */}
-      <div className="absolute right-10 top-14 w-20 h-20 rounded-full bg-amber-100/90 blur-[1px]" aria-hidden />
+    <div className="camp-sky-night flex flex-col items-center justify-center min-h-dvh px-6 relative overflow-hidden">
+      {/* Night campsite: stars, moon, hills, the rig and a fire */}
+      <Stars className="absolute inset-x-0 top-6 w-full h-32" />
+      <div className="absolute right-10 top-14 w-14 h-14 rounded-full bg-amber-50/90 blur-[0.5px]" aria-hidden />
       <div className="camp-hills absolute inset-x-0 bottom-0 h-40" aria-hidden />
+      <div className="absolute bottom-4 left-5 flex items-end gap-3 pointer-events-none" aria-hidden>
+        <RigIcon className="w-28 drop-shadow" flip />
+        <Campfire className="w-8 h-8 mb-1" />
+      </div>
       <div className="w-full max-w-sm relative z-10">
         <div className="flex flex-col items-center mb-8">
           <div className="bg-white/15 backdrop-blur-sm rounded-3xl p-4 mb-3">
@@ -161,17 +167,23 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             <div className="flex flex-col gap-3">
               <button
                 onClick={() => pickIdentity('diogo')}
-                className="flex items-center gap-3 border-2 border-[#2f6b4f] rounded-xl px-5 py-4 text-[#2f6b4f] font-semibold text-base hover:bg-emerald-50 transition-colors"
+                className="flex items-center gap-4 border-2 border-[#2f6b4f] rounded-2xl px-5 py-4 text-[#2f6b4f] font-bold text-base hover:bg-emerald-50 transition-colors"
               >
-                <Tent className="w-5 h-5" />
-                I'm Diogo
+                <span className="flex items-center justify-center w-11 h-11 rounded-full bg-emerald-50 text-2xl shrink-0">🧭</span>
+                <span className="text-left">
+                  I'm Diogo
+                  <span className="block text-xs font-medium text-gray-400">Trip captain · tow-master</span>
+                </span>
               </button>
               <button
                 onClick={() => pickIdentity('alice')}
-                className="flex items-center gap-3 border-2 border-pink-400 rounded-xl px-5 py-4 text-pink-600 font-semibold text-base hover:bg-pink-50 transition-colors"
+                className="flex items-center gap-4 border-2 border-pink-400 rounded-2xl px-5 py-4 text-pink-600 font-bold text-base hover:bg-pink-50 transition-colors"
               >
-                <ShoppingCart className="w-5 h-5" />
-                I'm Alice
+                <span className="flex items-center justify-center w-11 h-11 rounded-full bg-pink-50 text-2xl shrink-0">🧺</span>
+                <span className="text-left">
+                  I'm Alice
+                  <span className="block text-xs font-medium text-gray-400">Chief provisioner · list-boss</span>
+                </span>
               </button>
             </div>
           </div>

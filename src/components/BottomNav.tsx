@@ -1,10 +1,10 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Home, Tent, ShoppingCart } from 'lucide-react'
+import { Home, Caravan, ShoppingCart } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
 const TABS = [
   { path: '/', icon: Home, label: 'Home', exact: true },
-  { path: '/trips', icon: Tent, label: 'Camping', exact: false },
+  { path: '/trips', icon: Caravan, label: 'Camping', exact: false },
   { path: '/supermarket', icon: ShoppingCart, label: 'Supermarket', exact: false },
 ]
 
@@ -23,12 +23,19 @@ export function BottomNav() {
             key={tab.path}
             onClick={() => navigate(tab.path)}
             className={cn(
-              'flex-1 flex flex-col items-center gap-1 py-2.5 transition-colors',
+              'flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors',
               active ? 'text-[#2f6b4f]' : 'text-gray-400'
             )}
           >
-            <tab.icon className={cn('w-6 h-6', active && 'fill-current opacity-20')} />
-            <span className="text-xs font-medium">{tab.label}</span>
+            <span
+              className={cn(
+                'flex items-center justify-center px-4 py-1 rounded-full transition-colors',
+                active && 'bg-emerald-50 animate-tab-pop'
+              )}
+            >
+              <tab.icon className="w-6 h-6" />
+            </span>
+            <span className={cn('text-xs', active ? 'font-bold' : 'font-medium')}>{tab.label}</span>
           </button>
         )
       })}
