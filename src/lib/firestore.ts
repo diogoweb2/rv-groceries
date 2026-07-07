@@ -682,10 +682,18 @@ export async function syncTripStatuses(trips: Trip[], identity: UserIdentity) {
 // upcoming non-cancelled/non-completed trip.
 export function findNextOrActiveTrip(trips: Trip[]): Trip | undefined {
   const today = new Date().toISOString().slice(0, 10)
+  const live = trips.filter((t) => t.status !== 'cancelled' && t.status !== 'completed')
   return (
-    trips.find((t) => t.status === 'active') ??
-    trips
-      .filter((t) => t.startDate >= today && t.status !== 'cancelled' && t.status !== 'completed')
+    // 1. A trip explicitly marked active.
+    live.find((t) => t.status === 'active') ??
+    // 2. A trip currently underway by its dates but not yet marked active — a
+    //    planned trip whose start has passed must still be a valid target.
+    live
+      .filter((t) => t.startDate <= today && t.endDate >= today)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ??
+    // 3. Otherwise the soonest upcoming trip.
+    live
+      .filter((t) => t.startDate >= today)
       .sort((a, b) => a.startDate.localeCompare(b.startDate))[0]
   )
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   DndContext,
@@ -21,36 +21,106 @@ import { useSupermarketLists, useSupermarketItems, useCatalog, useTrips, useSupe
 import {
   addSupermarketItem, updateSupermarketItem,
   setSupermarketItemChecked, setSupermarketItemQty, linkSupermarketItemToTrip, unlinkSupermarketItemFromTrip,
-  completeSupermarketList, ensureCatalogItem,
+  completeSupermarketList, ensureCatalogItem, deleteSupermarketItemAndPropagate,
   parseCampingFlag, storeLabel, sortedByMemory, learnSupermarketOrder,
 } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ArrowLeft, CheckCheck, Plus, Minus, Tent, GripVertical } from 'lucide-react'
+import { ArrowLeft, CheckCheck, Plus, Minus, GripVertical, Trash2 } from 'lucide-react'
+import { RvIcon } from '@/components/RvIcon'
 import type { SupermarketItem } from '@/types'
+
+// Distance (px) the row must be swiped right before releasing deletes it.
+const SWIPE_DELETE_THRESHOLD = 96
 
 function SortableItem({
   item,
   onToggle,
   onToggleCamping,
   onChangeQty,
+  onDelete,
 }: {
   item: SupermarketItem
   onToggle: (item: SupermarketItem) => void
   onToggleCamping: (item: SupermarketItem) => void
   onChangeQty: (item: SupermarketItem, delta: number) => void
+  onDelete: (item: SupermarketItem) => void
 }) {
   const qtyNum = Math.max(1, Number(item.qty) || 1)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
+
+  // Horizontal swipe-to-delete. Tracked separately from the vertical drag
+  // reorder (which lives on the grip handle) so the two never fight.
+  const [dx, setDx] = useState(0)
+  const [swiping, setSwiping] = useState(false)
+  const start = useRef<{ x: number; y: number } | null>(null)
+  const locked = useRef<'h' | 'v' | null>(null)
+  const dxRef = useRef(0)
+
+  function onPointerDown(e: React.PointerEvent) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    start.current = { x: e.clientX, y: e.clientY }
+    locked.current = null
+    dxRef.current = 0
+  }
+  function onPointerMove(e: React.PointerEvent) {
+    if (!start.current) return
+    const deltaX = e.clientX - start.current.x
+    const deltaY = e.clientY - start.current.y
+    if (!locked.current) {
+      if (Math.abs(deltaX) < 8 && Math.abs(deltaY) < 8) return
+      locked.current = Math.abs(deltaX) > Math.abs(deltaY) ? 'h' : 'v'
+      if (locked.current === 'h') {
+        setSwiping(true)
+        // Keep receiving moves even if the cursor leaves the row.
+        try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch {}
+      }
+    }
+    if (locked.current !== 'h') return
+    e.preventDefault()
+    const next = Math.max(0, deltaX) // only reveal on right-swipe
+    dxRef.current = next
+    setDx(next)
+  }
+  function onPointerEnd() {
+    if (locked.current === 'h' && dxRef.current >= SWIPE_DELETE_THRESHOLD) {
+      onDelete(item)
+      return
+    }
+    start.current = null
+    locked.current = null
+    dxRef.current = 0
+    setSwiping(false)
+    setDx(0)
+  }
+
+  const willDelete = dx >= SWIPE_DELETE_THRESHOLD
+  const rowStyle = {
+    transform: `${CSS.Transform.toString(transform) ?? ''} translateX(${dx}px)`.trim(),
+    transition: swiping ? 'none' : transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`flex items-center gap-3 bg-white border-b border-gray-50 px-4 py-3.5 ${item.checked ? 'opacity-60' : ''}`}
-    >
+    <div ref={setNodeRef} className="relative border-b border-gray-50">
+      {/* Delete affordance revealed as the row slides right. */}
+      <div
+        className={`absolute inset-y-0 left-0 flex items-center gap-2 px-4 text-white transition-colors ${
+          willDelete ? 'bg-red-600' : 'bg-red-400'
+        }`}
+        style={{ width: Math.max(dx, 0) }}
+      >
+        <Trash2 className="w-5 h-5 shrink-0" />
+      </div>
+      <div
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+        style={{ ...rowStyle, touchAction: 'pan-y' }}
+        className={`relative flex items-center gap-3 bg-white px-4 py-3.5 ${item.checked ? 'opacity-60' : ''}`}
+      >
       <button {...attributes} {...listeners} className="text-gray-300 touch-none">
         <GripVertical className="w-5 h-5" />
       </button>
@@ -98,13 +168,14 @@ function SortableItem({
       <button
         onClick={() => onToggleCamping(item)}
         className={`w-10 h-10 rounded-lg shrink-0 flex items-center justify-center transition-colors ${
-          item.forCamping ? 'bg-emerald-50 text-[#2f6b4f]' : 'text-gray-300 hover:text-gray-500'
+          item.forCamping ? 'bg-emerald-50' : ''
         }`}
         aria-label={item.forCamping ? 'Remove camping flag' : 'Flag for camping'}
         title="For camping"
       >
-        <Tent className="w-6 h-6" />
+        <RvIcon className="w-7 h-7" active={!!item.forCamping} />
       </button>
+      </div>
     </div>
   )
 }
@@ -252,6 +323,13 @@ export function SupermarketDetail() {
     }
   }
 
+  // Swipe-right-to-delete removes the item and, if it's live-linked to a trip
+  // grocery item, that copy too (§8/§15).
+  async function handleDelete(item: SupermarketItem) {
+    setItems(items.filter(i => i.id !== item.id))
+    await deleteSupermarketItemAndPropagate(item)
+  }
+
   async function handleComplete() {
     if (!list) return
     const missed = items.filter(i => !i.checked).length
@@ -323,7 +401,7 @@ export function SupermarketDetail() {
         </div>
         {parsed.forCamping && (
           <p className="px-4 pb-2 text-xs text-[#2f6b4f] flex items-center gap-1">
-            <Tent className="w-3.5 h-3.5" /> “{parsed.name}” will be flagged for camping
+            <RvIcon className="w-4 h-4" active /> “{parsed.name}” will be flagged for camping
 
           </p>
         )}
@@ -353,6 +431,7 @@ export function SupermarketDetail() {
                 onToggle={toggleBought}
                 onToggleCamping={toggleCamping}
                 onChangeQty={changeQty}
+                onDelete={handleDelete}
               />
             ))}
           </SortableContext>

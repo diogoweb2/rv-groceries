@@ -94,9 +94,12 @@ per-store shopping lists for Diogo; grocery handling also lives inside camping t
 The Home screen focuses on a single trip, chosen in this priority:
 
 1. The trip with status `active`, if any; otherwise
-2. The **soonest upcoming** trip: earliest `startDate` that is **today or later** and whose
-   status is not `cancelled` or `completed`.
-3. If neither exists, show an empty state prompting to plan a trip.
+2. A trip **currently underway by its dates** (`startDate` ≤ today ≤ `endDate`) even if it is
+   still `planned` — a trip whose start has passed but that was never marked active is still a
+   valid target; if several, the one with the earliest `startDate`. Otherwise
+3. The **soonest upcoming** trip: earliest `startDate` that is **today or later**.
+   (In all cases `cancelled`/`completed` trips are excluded.)
+4. If none exists, show an empty state prompting to plan a trip.
 
 - **Countdown copy:** "Happening now" if active or today is within the date range; otherwise
   "Starts today", "Starts tomorrow", or "In N days".
@@ -142,6 +145,9 @@ The Home screen focuses on a single trip, chosen in this priority:
   - **Auto-hide prompt on completion.** The moment a checklist becomes **100% complete** (its
     last item is checked), the user is asked whether to hide it for this trip. Declining leaves
     it visible. A list that is already complete when the trip is opened does not re-prompt.
+    **Store-linked grocery checklists are exempt** — their items are managed from the Supermarket
+    side and being "all bought" is their normal state, so auto-hiding them would swallow items
+    the user expects to see mirrored into the trip (§8). They can still be hidden manually.
 - **Completed items sort to the bottom.** Inside an expanded checklist card, checked (completed)
   items are shown by default but **sorted to the bottom** of the list (below outstanding items,
   preserving order within each group).
@@ -420,10 +426,12 @@ supermarket.
   list (below all other items); un-checking it leaves it in place rather than moving it back.
 - **Quantity stepper.** Every item is created with quantity 1 and can be adjusted anytime with a
   `+`/`-` stepper on its row (no upper cap, minimum 1).
-- **No per-item delete.** Supermarket rows have no trash button — the row's actions are the
-  bought check, the `+`/`-` stepper, and a tent (camping) toggle, kept large for easy tapping.
-  Items leave a list by being completed (§15 status), not deleted individually. (Deleting a
-  linked camping item still propagates from the trip side, §8.)
+- **Swipe-right to delete.** Supermarket rows have no trash button, but swiping a row to the
+  right past a threshold deletes it (revealing a red delete affordance as it slides). The
+  horizontal swipe is tracked independently from the vertical drag-reorder handle so the two
+  don't conflict. The row's tap actions remain the bought check, the `+`/`-` stepper, and a
+  tent (camping) toggle, kept large for easy tapping. Deleting a live-linked camping item also
+  removes its trip grocery copy (§8); deleting from the trip side still propagates here too.
 
 ## 16. Supermarket auto-sort (learned ordering)
 

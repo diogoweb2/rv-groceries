@@ -76,13 +76,16 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
       completeRef.current = isComplete
       return
     }
-    if (isComplete && !completeRef.current && !checklist.hidden) {
+    // Store-linked grocery checklists are managed from the Supermarket side and
+    // are routinely "all bought" — auto-hiding them would swallow items the user
+    // expects to see mirrored into the trip. Only prompt for hand-made lists.
+    if (isComplete && !completeRef.current && !checklist.hidden && !isGrocery) {
       if (confirm(`"${checklist.name}" is all done — hide it for this trip?`)) {
         updateChecklist(tripId, checklist.id, { hidden: true })
       }
     }
     completeRef.current = isComplete
-  }, [checked, total, checklist.hidden, checklist.name, checklist.id, tripId])
+  }, [checked, total, checklist.hidden, checklist.name, checklist.id, tripId, isGrocery])
 
   function handlePrint() {
     setMenuOpen(false)
