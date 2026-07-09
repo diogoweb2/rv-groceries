@@ -1091,6 +1091,13 @@ export async function addItem(
   }))
 }
 
+/** The trip's current stop index (0–4), clamped; 0 when the trip is unreadable. */
+export async function getTripCurrentStop(tripId: string): Promise<number> {
+  const snap = await getDoc(doc(db, 'trips', tripId))
+  const raw = snap.exists() ? (snap.data().currentStop as number | undefined) : undefined
+  return Math.min(Math.max(raw ?? 0, 0), TRIP_STOPS.length - 1)
+}
+
 export async function toggleItem(
   tripId: string,
   checklistId: string,
@@ -1140,7 +1147,15 @@ export async function setChecklistItemChecked(
   checked: boolean,
   identity: UserIdentity,
 ) {
-  await toggleItem(tripId, checklist.id, item.id, checked, identity, item.rev)
+  // The checklist-card checkbox and the stage checkbox are two views of the same
+  // "handled" state (§20). Mirror the card check into `stagesDone` at the trip's
+  // current stop, so a "remove after completion" item checked from the card also
+  // drops out of the later stops.
+  const stop = await getTripCurrentStop(tripId)
+  const stagesDone = checked
+    ? Array.from(new Set([...(item.stagesDone ?? []), stop]))
+    : (item.stagesDone ?? []).filter(s => s !== stop)
+  await updateItem(tripId, checklist.id, item.id, { checked, stagesDone }, identity, item.rev)
 
   if (item.persist) {
     if (checked) {

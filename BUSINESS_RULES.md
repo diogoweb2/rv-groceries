@@ -632,7 +632,10 @@ at Home).
 **Remove after completion.** Each item row offers a **"Remove after completion"** toggle in
 its "⋮" overflow menu (the item row itself shows only the checkbox and the destination icon).
 It behaves like the persist pin: it is an **on/off flag** (`removeOnComplete`) that by itself
-neither checks nor hides the item. When it is **on**, once the item is **checked off at a stop**
+neither checks nor hides the item. The checklist-card checkbox and the stage checkbox are two
+views of the same "handled" state: checking an item from its **checklist card** records it as
+handled at the trip's **current stop** (and unchecking clears that stop), so both routes feed
+the rule below. When it is **on**, once the item is **checked off at a stop**
 (the left checkbox, `stagesDone`), it **no longer appears at any later stop** of the trip. It
 still shows at the stop where it was checked, so the check can be undone; unchecking it there
 brings it back to the following stops. When it is **off**, the item keeps appearing at every

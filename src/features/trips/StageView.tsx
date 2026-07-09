@@ -23,6 +23,15 @@ function ItemsCollector({ tripId, checklist, onItems }: {
   return null
 }
 
+// Items checked from a checklist card before the card check began mirroring into
+// `stagesDone` have `checked: true` and no stops recorded. Read them as handled
+// at the first stop, so a "remove after completion" flag still takes effect.
+function stagesDoneOf(item: ChecklistItem): number[] {
+  const stages = item.stagesDone ?? []
+  if (stages.length === 0 && item.checked) return [0]
+  return stages
+}
+
 export function StageView({ trip, checklists }: { trip: Trip; checklists: Checklist[] }) {
   const identity = useAppStore(s => s.identity)!
   const [itemsByList, setItemsByList] = useState<Record<string, ChecklistItem[]>>({})
@@ -39,7 +48,7 @@ export function StageView({ trip, checklists }: { trip: Trip; checklists: Checkl
   // checked at, so the check can be undone.
   const allItems = checklists
     .flatMap(c => itemsByList[c.id] ?? [])
-    .filter(i => !(i.removeOnComplete && (i.stagesDone ?? []).some(s => s < stop)))
+    .filter(i => !(i.removeOnComplete && stagesDoneOf(i).some(s => s < stop)))
   const shown = stage.itemFilter
     ? allItems.filter(i => stage.itemFilter!(itemDestination(i)))
     : []
