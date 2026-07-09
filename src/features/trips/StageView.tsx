@@ -23,13 +23,15 @@ function ItemsCollector({ tripId, checklist, onItems }: {
   return null
 }
 
-// Items checked from a checklist card before the card check began mirroring into
-// `stagesDone` have `checked: true` and no stops recorded. Read them as handled
-// at the first stop, so a "remove after completion" flag still takes effect.
-// Not for groceries, where `checked` means "bought", not "handled at a stop".
-function stagesDoneOf(item: ChecklistItem, isGrocery: boolean): number[] {
+// The stops at which an item counts as handled.
+// - Groceries: buying it (`checked`) is the handling, and it happens at Home.
+// - Other items: the per-stop marks. Items checked from a checklist card before
+//   the card check began mirroring into `stagesDone` have `checked: true` and no
+//   stops recorded, so read those as handled at Home too.
+function handledStops(item: ChecklistItem, isGrocery: boolean): number[] {
+  if (isGrocery) return item.checked ? [0] : []
   const stages = item.stagesDone ?? []
-  if (stages.length === 0 && item.checked && !isGrocery) return [0]
+  if (stages.length === 0 && item.checked) return [0]
   return stages
 }
 
@@ -44,18 +46,19 @@ export function StageView({ trip, checklists }: { trip: Trip; checklists: Checkl
   const stop = Math.min(Math.max(trip.currentStop ?? 0, 0), TRIP_STOPS.length - 1)
   const stage = TRIP_STAGES[stop]
 
-  // An unbought grocery item isn't in the truck yet, so it has nothing to sort
-  // at any stop (§8/§20). It joins the stops only once checked (= bought).
   const groceryListIds = new Set(checklists.filter(c => c.phase === 'grocery').map(c => c.id))
-  const inTrip = (i: ChecklistItem) => !groceryListIds.has(i.checklistId) || i.checked
 
-  // "Remove after completion" items (§20) drop out of the stops that follow the
-  // one where they were checked off. They still show at the stop they were
-  // checked at, so the check can be undone.
+  // Only what was actually handled at an earlier stop travels to this one (§20):
+  // an item left unchecked never made it into the truck, so there is nothing to
+  // stow, sort, or bring inside. An unbought grocery is the same case.
+  // "Remove after completion" items are the exception in reverse — being handled
+  // is exactly what retires them, so they don't travel on.
   const allItems = checklists
     .flatMap(c => itemsByList[c.id] ?? [])
-    .filter(inTrip)
-    .filter(i => !(i.removeOnComplete && stagesDoneOf(i, groceryListIds.has(i.checklistId)).some(s => s < stop)))
+    .filter(i => {
+      const handledEarlier = handledStops(i, groceryListIds.has(i.checklistId)).some(s => s < stop)
+      return handledEarlier && !i.removeOnComplete
+    })
   const shown = stage.itemFilter
     ? allItems.filter(i => stage.itemFilter!(itemDestination(i)))
     : []

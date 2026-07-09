@@ -629,11 +629,14 @@ at Home).
   items only. Then the **final** *Arriving home* safety checklist, whose **Finish trip**
   action marks the trip complete and opens the **star rating** prompt (§14).
 
-**Unbought groceries never reach a stop.** The derived stop views (stops 2–4) draw from every
-checklist, but a **grocery** item only enters them once it is **checked (= bought)** — an
-unbought grocery isn't in the truck, so there is nothing to stow, sort, or bring inside. Items
-on the Other list have no such gate; they appear at every stop their destination qualifies them
-for, checked or not. Un-checking a bought grocery removes it from the stops again.
+**Only what was handled travels to the next stop.** The derived stop views (stops 2–4) draw
+from every checklist, but an item appears at a stop **only if it was checked off at an earlier
+stop**. An item left unchecked never made it into the truck — it wasn't found, or the user
+chose not to bring it — so there is nothing to stow, sort, or bring inside for it. For a
+**grocery** item the handling is **buying** it: `checked` (= bought) admits it to the stops,
+and un-checking removes it again. For an **Other**-list item the handling is the per-stop
+check (`stagesDone`), which the checklist card also records at the trip's current stop. An
+item that was never handled simply never enters the route.
 
 **Remove after completion.** Each item row offers a **"Remove after completion"** toggle in
 its "⋮" overflow menu (the item row itself shows only the checkbox and the destination icon).
@@ -642,13 +645,13 @@ neither checks nor hides the item. The checklist-card checkbox and the stage che
 views of the same "handled" state: checking an item from its **checklist card** records it as
 handled at the trip's **current stop** (and unchecking clears that stop), so both routes feed
 the rule below. **Grocery items are exempt** from that mirroring — there a check means
-"bought", which is what admits the item to the stops, not handling at one. When it is **on**, once the item is **checked off at a stop**
-(the left checkbox, `stagesDone`), it **no longer appears at any later stop** of the trip. It
-still shows at the stop where it was checked, so the check can be undone; unchecking it there
-brings it back to the following stops. When it is **off**, the item keeps appearing at every
-stop its destination qualifies it for. The flag is independent of the persist pin: **a pinned
-item that's removed after completion still recurs on the next trip** (§12), and it never
-propagates to Supermarket (it's trip-management, not "bought").
+"bought", which is what admits the item to the stops, not handling at one. When it is **on**,
+the item **never travels to a later stop**: being handled is exactly what retires it, and an
+item that was never handled doesn't travel anyway (see the rule above). When it is **off**, the
+item travels to the stops that follow the one where it was handled, subject to its destination.
+The flag is independent of the persist pin: **a pinned item that's removed after completion
+still recurs on the next trip** (§12), and it never propagates to Supermarket (it's
+trip-management, not "bought").
 
 **Batch flagging.** The trip's "⋮" menu offers **"Remove after completion"**, opening a
 full-screen sheet listing every item of every non-hidden checklist, grouped by checklist.
