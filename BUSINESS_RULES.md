@@ -580,6 +580,12 @@ See `STAGE_FLOW_SPEC.md` for the design rationale.
 - **Adding.** Every item is added with the Add-item sheet's required **final destination**
   step (§18). The only lists you can create are per-store Groceries ("Add store list"); the
   Other list is automatic.
+- **List titles are display-only.** A list's stored `name` never changes (grocery lists key
+  off the store name for Supermarket sync and pinned lists), but everywhere a list title is
+  shown — card header, print output, add-item picker — it is rendered as **"Buy @ <store>"**
+  for grocery lists and **"Bring to Truck"** for the Other list, so it's obvious which lists
+  are shopping and which is loading. The section headers above them read **Groceries** and
+  **Packing**.
 
 ### The route
 
@@ -656,7 +662,7 @@ the displayed icon is remapped Home→Truck at stops 2 and 3 (stored destination
 | Phase       | Label                 | Status                          |
 |-------------|-----------------------|---------------------------------|
 | `grocery`   | Groceries (per store) | active                          |
-| `other`     | Other                 | active                          |
+| `other`     | Packing / "Bring to Truck" | active                     |
 | `pre_early` | Before the trip       | legacy — migrated into `other`  |
 | `pre_dayof` | Day of departure      | legacy — migrated into `other`  |
 | `pack_down` | Pack down / return    | legacy — migrated into `other`  |

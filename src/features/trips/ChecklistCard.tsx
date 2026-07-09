@@ -13,6 +13,7 @@ import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin, EyeOff, Eye, Check, CircleCheck, CircleDashed, Printer } from 'lucide-react'
+import { checklistTitle } from '@/lib/checklistTitle'
 import { printLists } from '@/lib/print'
 import { destinationMeta, destinationIcon, nextDestination } from './destination'
 import type { Checklist, ChecklistItem } from '@/types'
@@ -81,7 +82,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
     // are routinely "all bought" — auto-hiding them would swallow items the user
     // expects to see mirrored into the trip. Only prompt for hand-made lists.
     if (isComplete && !completeRef.current && !checklist.hidden && !isGrocery) {
-      if (confirm(`"${checklist.name}" is all done — hide it for this trip?`)) {
+      if (confirm(`"${checklistTitle(checklist)}" is all done — hide it for this trip?`)) {
         updateChecklist(tripId, checklist.id, { hidden: true })
       }
     }
@@ -90,8 +91,8 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
 
   function handlePrint() {
     setMenuOpen(false)
-    printLists(checklist.name, [{
-      name: checklist.name,
+    printLists(checklistTitle(checklist), [{
+      name: checklistTitle(checklist),
       items: items.filter(i => !i.checked).map(i => printLine(i, isGrocery)),
     }])
   }
@@ -163,7 +164,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
 
   async function handleDeleteChecklist() {
     setMenuOpen(false)
-    if (!confirm(`Delete checklist "${checklist.name}" and all its items?`)) return
+    if (!confirm(`Delete checklist "${checklistTitle(checklist)}" and all its items?`)) return
     if (checklist.pinned) {
       await removePinnedChecklist(checklist.phase, checklist.name)
     }
@@ -188,7 +189,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
           onClick={() => setExpanded(v => !v)}
         >
           <div className="flex items-center justify-between gap-2 mb-1.5">
-            <span className="font-semibold text-gray-800 truncate">{checklist.name}</span>
+            <span className="font-semibold text-gray-800 truncate">{checklistTitle(checklist)}</span>
               {checklist.hidden && <span className="text-[10px] font-medium uppercase tracking-wide bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded shrink-0">Hidden</span>}
               {checklist.pinned && <Pin className="w-3.5 h-3.5 text-[#2f6b4f] fill-current shrink-0" />}
             <div className="flex items-center gap-2 shrink-0">

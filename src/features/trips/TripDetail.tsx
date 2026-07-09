@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTrips, useChecklists, useAmenities, useOrdering, useStores, useProcedures } from '@/hooks/useFirestore'
 import { updateTrip, deleteTrip, completeTrip, addChecklist, savePhaseOrder, saveChecklistOrder, saveChecklistPositions, rateTrip, getTripChecklistsWithItems, findOrCreateOtherChecklist, TRIP_STOPS } from '@/lib/firestore'
+import { checklistTitle } from '@/lib/checklistTitle'
 import { printLists, type PrintList } from '@/lib/print'
 import { useAppStore } from '@/lib/store'
 import { ChecklistCard } from './ChecklistCard'
@@ -26,7 +27,7 @@ import type { Trip, ChecklistPhase, Checklist } from '@/types'
 // Two-list model (§20): only Groceries (per store) and a single Other list.
 const PHASE_LABELS: Record<string, string> = {
   grocery: 'Groceries',
-  other: 'Other',
+  other: 'Packing',
   pre_early: 'Before the trip',
   pre_dayof: 'Day of departure',
   pack_down: 'Pack down / return',
@@ -203,7 +204,7 @@ export function TripDetail() {
           if (isGrocery) return qty > 1 ? `${qty} × ${i.name}` : i.name
           return i.qty && qty > 1 ? `${i.name} × ${i.qty}` : i.name
         })
-        lists.push({ name: checklist.name, items: outstanding })
+        lists.push({ name: checklistTitle(checklist), items: outstanding })
       }
     }
     printLists(currentTrip.title, lists)
@@ -617,7 +618,7 @@ export function TripDetail() {
                     onClick={() => handlePickListToAddItem(cl.id)}
                     className="text-left py-2.5 px-3 rounded-xl text-sm font-medium border-2 border-gray-200 text-gray-700 hover:border-[#2f6b4f] transition-colors"
                   >
-                    {cl.name}
+                    {checklistTitle(cl)}
                   </button>
                 ))}
               </div>
