@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Search, Plus } from 'lucide-react'
 import { DESTINATIONS } from './destination'
+import { checklistTitle } from '@/lib/checklistTitle'
 import type { CatalogItem, Checklist, ChecklistItem, ItemDestination } from '@/types'
 
 // Step 2 of adding an item (§18): pick the item's final destination. Required —
@@ -40,10 +41,12 @@ export function AddItemSheet({ tripId, checklist, onClose }: Props) {
 
   const suggestions = useMemo(() => {
     const q = query.toLowerCase().trim()
+    // Autocomplete only: no query, no list (§18).
+    if (!q) return []
     const seen = new Set<string>()
     return catalog
       .filter(item => !existingNames.has(item.name.toLowerCase()))
-      .filter(item => !q || item.name.toLowerCase().includes(q))
+      .filter(item => item.name.toLowerCase().includes(q))
       .sort((a, b) => (b.stats?.totalUsed ?? 0) - (a.stats?.totalUsed ?? 0))
       .filter(item => {
         const key = item.name.toLowerCase()
@@ -51,7 +54,7 @@ export function AddItemSheet({ tripId, checklist, onClose }: Props) {
         seen.add(key)
         return true
       })
-      .slice(0, 20)
+      .slice(0, 8)
   }, [catalog, query, existingNames])
 
   // Step 2: set the chosen destination on the just-added item, then return to
@@ -128,7 +131,7 @@ export function AddItemSheet({ tripId, checklist, onClose }: Props) {
   // Step 2 — after an item is added, ask where it finally belongs (§18).
   if (pending) {
     return (
-      <Sheet open onClose={onClose} title={`Add to ${checklist.name}`}>
+      <Sheet open onClose={onClose} title={`Add to ${checklistTitle(checklist)}`}>
         <div className="p-5 flex flex-col gap-4">
           <p className="text-center text-gray-500 text-sm">
             Added <strong className="text-gray-800">{pending.name}</strong> — where does it belong after the trip?
@@ -152,7 +155,7 @@ export function AddItemSheet({ tripId, checklist, onClose }: Props) {
   }
 
   return (
-    <Sheet open onClose={onClose} title={`Add to ${checklist.name}`}>
+    <Sheet open onClose={onClose} title={`Add to ${checklistTitle(checklist)}`}>
       <div className="p-4 border-b border-gray-100">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
