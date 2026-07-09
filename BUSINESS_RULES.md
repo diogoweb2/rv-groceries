@@ -197,7 +197,10 @@ The `itemCatalog` collection is the **single global source** for item autocomple
   The UI also de-duplicates suggestions by name defensively.
 - **Autocomplete only.** The trip Add-item sheet shows **no suggestions until something is
   typed** — an empty search box lists nothing. Once typing, it shows at most 8 name matches,
-  ranked by `totalUsed`, plus the "Add …" row for a name that isn't in the catalog yet.
+  ranked by `totalUsed`.
+- **Matches come first.** Catalog matches are listed **above** the "Add …" row that creates a
+  brand-new item from the typed text, since reusing a known item is the common case. The
+  "Add …" row is hidden when the typed text exactly matches a catalog entry.
 - **One-time device sync.** On first load per device, the app:
   1. **De-dupes** the catalog (merges same-name entries, keeping the most-used, deleting the rest), then
   2. **Backfills** the catalog from every item already present across all trip checklists and

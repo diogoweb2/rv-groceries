@@ -170,28 +170,18 @@ export function AddItemSheet({ tripId, checklist, onClose }: Props) {
       </div>
 
       <div className="flex flex-col">
-        {/* Add custom if typed something not in catalog */}
-        {query.trim() && !hasExact && (
-          <button
-            onClick={addCustomItem}
-            disabled={saving}
-            className="flex items-center gap-3 px-4 py-3.5 border-b border-gray-50 hover:bg-gray-50"
-          >
-            <div className="w-8 h-8 rounded-full bg-[#2f6b4f] flex items-center justify-center shrink-0">
-              <Plus className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-base text-gray-800">Add "<strong>{query.trim()}</strong>"</span>
-          </button>
-        )}
-
-        {/* Catalog suggestions */}
+        {/* Catalog suggestions first — reusing a known item is the common case,
+            typing a brand-new name is the fallback below. */}
         {suggestions.map(item => (
           <button
             key={item.id}
             onClick={() => addCatalogItem(item)}
             disabled={saving}
-            className="flex items-center gap-3 px-4 py-3.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 text-left"
+            className="flex items-center gap-3 px-4 py-3.5 border-b border-gray-50 hover:bg-gray-50 text-left"
           >
+            <div className="w-8 h-8 rounded-full bg-[#2f6b4f] flex items-center justify-center shrink-0">
+              <Plus className="w-4 h-4 text-white" />
+            </div>
             <div className="flex-1 min-w-0">
               <p className="text-base text-gray-800">{item.name}</p>
               {item.defaultStoreId && (
@@ -203,6 +193,20 @@ export function AddItemSheet({ tripId, checklist, onClose }: Props) {
             )}
           </button>
         ))}
+
+        {/* Add custom if typed something not in catalog */}
+        {query.trim() && !hasExact && (
+          <button
+            onClick={addCustomItem}
+            disabled={saving}
+            className="flex items-center gap-3 px-4 py-3.5 border-b border-gray-50 last:border-0 hover:bg-gray-50"
+          >
+            <div className="w-8 h-8 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center shrink-0">
+              <Plus className="w-4 h-4 text-gray-400" />
+            </div>
+            <span className="text-base text-gray-500">Add "<strong className="text-gray-800">{query.trim()}</strong>"</span>
+          </button>
+        )}
 
         {suggestions.length === 0 && !query.trim() && (
           <p className="text-center text-gray-400 text-sm py-8">
