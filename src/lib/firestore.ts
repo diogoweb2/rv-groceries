@@ -777,23 +777,19 @@ export async function setStageItemDone(
   }, identity, item.rev)
 }
 
-// Mark an item done for the whole trip (§20): hides it from every stop's
-// derived view. Completing also checks its radio. Deliberately does NOT route
-// through the persist rule, so a pinned item stays in the recurring set and
-// still shows up next trip. No Supermarket "bought" propagation — completion is
-// trip-management, not shopping.
-export async function setItemCompleted(
+// Toggle the "remove after completion" flag (§20). Marking it does not check or
+// hide the item — it only means that once the item is checked off at a stop, it
+// stops appearing at the stops that follow. Deliberately does NOT route through
+// the persist rule, so a pinned item stays in the recurring set and still shows
+// up next trip, and it never propagates to Supermarket.
+export async function setItemRemoveOnComplete(
   tripId: string,
   checklistId: string,
   item: ChecklistItem,
-  completed: boolean,
+  removeOnComplete: boolean,
   identity: UserIdentity,
 ) {
-  await updateItem(
-    tripId, checklistId, item.id,
-    completed ? { completed: true, checked: true } : { completed: false },
-    identity, item.rev,
-  )
+  await updateItem(tripId, checklistId, item.id, { removeOnComplete }, identity, item.rev)
 }
 
 // The single free-form list for a trip under the two-list model (§20).

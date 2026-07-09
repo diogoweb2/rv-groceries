@@ -199,11 +199,11 @@ export interface ChecklistItem {
    */
   stagesDone?: number[]
   /**
-   * Trip-wide "done, stop showing it" flag (§20): a completed item is hidden
-   * from every stop's derived view. Independent of the persist pin — a pinned
-   * item still recurs next trip when completed.
+   * "Retire once handled" toggle (§20): when on, the item disappears from the
+   * stops *after* the one where it was checked off. Independent of the persist
+   * pin — a pinned item still recurs next trip.
    */
-  completed?: boolean
+  removeOnComplete?: boolean
   /**
    * Legacy "bring it back" flag — superseded by `destination` (`bringBack:
    * true` reads as destination `home`). Kept only as a read fallback.

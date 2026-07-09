@@ -605,17 +605,17 @@ back one stop without losing check state. New trips start at Home (0).
   items only. Then the **final** *Arriving home* safety checklist, whose **Finish trip**
   action marks the trip complete and opens the **star rating** prompt (§14).
 
-**Complete for the whole trip.** Each item row (at the Home stop) offers **"Remove after
-completion"** in its "⋮" overflow menu (the item row itself shows only the checkbox and the
-destination icon). Completing sets a trip-wide `completed`
-flag *and* checks the item, and sinks it to the bottom of its list. A **completed item is
-hidden from every stop's derived view** — once you're done with something, it stops
-reappearing at the campsite, warehouse, or arrival. Completion is independent of the persist
-pin: **a pinned item that's completed still recurs on the next trip** (completion deliberately
-doesn't remove it from the recurring set, §12). Completing does not propagate to Supermarket
-(it's trip-management, not "bought"). A completed row can be re-opened (toggle it off). There is
-**no per-item delete** — completed items are removed from view via the card's "Hide completed"
-toggle (§5), not a trash button.
+**Remove after completion.** Each item row offers a **"Remove after completion"** toggle in
+its "⋮" overflow menu (the item row itself shows only the checkbox and the destination icon).
+It behaves like the persist pin: it is an **on/off flag** (`removeOnComplete`) that by itself
+neither checks nor hides the item. When it is **on**, once the item is **checked off at a stop**
+(the left checkbox, `stagesDone`), it **no longer appears at any later stop** of the trip. It
+still shows at the stop where it was checked, so the check can be undone; unchecking it there
+brings it back to the following stops. When it is **off**, the item keeps appearing at every
+stop its destination qualifies it for. The flag is independent of the persist pin: **a pinned
+item that's removed after completion still recurs on the next trip** (§12), and it never
+propagates to Supermarket (it's trip-management, not "bought"). There is **no per-item delete**
+in the card — checked items are removed from view via the card's "Hide completed" toggle (§5).
 
 **Per-stop, independent completion.** Each item is checked **independently at each stop**
 (`stagesDone` = the stop indices it's been handled at). Checking it at one stop does not

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useChecklistItems, useStores } from '@/hooks/useFirestore'
 import {
-  updateChecklist, deleteChecklist, setItemPersist, setItemDestination, itemDestination, setItemCompleted,
+  updateChecklist, deleteChecklist, setItemPersist, setItemDestination, itemDestination, setItemRemoveOnComplete,
   savePinnedChecklist, removePinnedChecklist,
   pushPinnedChecklistToTrips,
   setChecklistItemChecked, updateChecklistItemAndPropagate,
@@ -49,9 +49,9 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
   const progress = total ? (checked / total) * 100 : 0
 
   // Completed items are auto-hidden within the card unless "Show completed" is on;
-  // when shown, trip-completed (§20) sink to the very bottom, then checked items.
+  // when shown, they sink to the bottom.
   const visibleItems = showCompleted
-    ? [...items].sort((a, b) => Number(!!a.completed) - Number(!!b.completed) || Number(a.checked) - Number(b.checked))
+    ? [...items].sort((a, b) => Number(a.checked) - Number(b.checked))
     : items.filter(i => !i.checked)
 
   // When this checklist is pinned, keep the global snapshot in sync with any
@@ -113,8 +113,8 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
     await setItemDestination(tripId, checklist, item, nextDestination(itemDestination(item)), identity)
   }
 
-  async function handleToggleComplete(item: ChecklistItem) {
-    await setItemCompleted(tripId, checklist.id, item, !item.completed, identity)
+  async function handleToggleRemoveOnComplete(item: ChecklistItem) {
+    await setItemRemoveOnComplete(tripId, checklist.id, item, !item.removeOnComplete, identity)
   }
 
   async function handleChangeQty(item: ChecklistItem, delta: number) {
@@ -350,12 +350,12 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
                         {item.persist && <Check className="w-4 h-4 shrink-0" />}
                       </button>
                       <button
-                        onClick={() => { setItemMenu(null); handleToggleComplete(item) }}
-                        className={`flex items-center gap-2 w-full px-4 py-2.5 text-sm hover:bg-gray-50 ${item.completed ? 'text-[#2f6b4f]' : 'text-gray-700'}`}
+                        onClick={() => { setItemMenu(null); handleToggleRemoveOnComplete(item) }}
+                        className={`flex items-center gap-2 w-full px-4 py-2.5 text-sm hover:bg-gray-50 ${item.removeOnComplete ? 'text-[#2f6b4f]' : 'text-gray-700'}`}
                       >
                         <CircleCheck className="w-4 h-4 shrink-0" />
                         <span className="flex-1 text-left">Remove after completion</span>
-                        {item.completed && <Check className="w-4 h-4 shrink-0" />}
+                        {item.removeOnComplete && <Check className="w-4 h-4 shrink-0" />}
                       </button>
                     </div>
                   </>

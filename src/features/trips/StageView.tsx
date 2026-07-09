@@ -34,8 +34,12 @@ export function StageView({ trip, checklists }: { trip: Trip; checklists: Checkl
   const stop = Math.min(Math.max(trip.currentStop ?? 0, 0), TRIP_STOPS.length - 1)
   const stage = TRIP_STAGES[stop]
 
-  // Completed items (§20) are done for the whole trip — never shown at any stop.
-  const allItems = checklists.flatMap(c => itemsByList[c.id] ?? []).filter(i => !i.completed)
+  // "Remove after completion" items (§20) drop out of the stops that follow the
+  // one where they were checked off. They still show at the stop they were
+  // checked at, so the check can be undone.
+  const allItems = checklists
+    .flatMap(c => itemsByList[c.id] ?? [])
+    .filter(i => !(i.removeOnComplete && (i.stagesDone ?? []).some(s => s < stop)))
   const shown = stage.itemFilter
     ? allItems.filter(i => stage.itemFilter!(itemDestination(i)))
     : []
