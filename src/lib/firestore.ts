@@ -805,6 +805,21 @@ export async function findOrCreateOtherChecklist(tripId: string): Promise<string
   return ref.id
 }
 
+// Every trip gets one Groceries checklist per store, automatically (§20). Stores
+// are never picked by hand; a store added later shows up on the next trip open.
+export async function ensureGroceryChecklists(tripId: string, stores: Store[]) {
+  if (stores.length === 0) return
+  const snap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
+  const existing = snap.docs.map((d) => d.data() as Checklist)
+  const haveStoreIds = new Set(existing.filter((c) => c.phase === 'grocery').map((c) => c.storeId))
+  const missing = stores.filter((s) => !haveStoreIds.has(s.id))
+  if (missing.length === 0) return
+  let order = existing.filter((c) => c.phase === 'grocery').length
+  for (const s of missing) {
+    await addChecklist(tripId, { name: s.name, phase: 'grocery', order: order++, storeId: s.id })
+  }
+}
+
 export function subscribeProcedures(cb: (items: Procedure[]) => void) {
   return onSnapshot(collection(db, 'procedures'), (snap) =>
     cb(snap.docs.map((d) => docData<Procedure>(d)))

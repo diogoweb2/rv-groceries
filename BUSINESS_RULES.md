@@ -213,9 +213,10 @@ The `itemCatalog` collection is the **single global source** for item autocomple
   grocery checklist is for **exactly one Store** (see §11) — picked from a store list, not
   typed as free text. The checklist's name mirrors the store's name at the time it's created
   or changed.
-  - **New checklist.** The "New checklist" dialog shows a store picker (instead of a name
-    field) when the Groceries section is selected, offering stores that don't already have a
-    grocery checklist on this trip.
+  - **Automatic.** Grocery checklists are never created by hand — there is no "Add store list"
+    action. Opening a trip provisions one grocery checklist per Store (§11) that doesn't already
+    have one, appended below the Other list. A store added later shows up on every trip the next
+    time that trip is opened.
   - **Change store.** The checklist menu's "Change store" (grocery checklists only, replacing
     "Rename") re-links the checklist to a different store, updating its name to match.
   - **Quantity.** Every grocery item has a `+`/`-` quantity stepper on its row (min 1), matching
@@ -578,8 +579,9 @@ See `STAGE_FLOW_SPEC.md` for the design rationale.
   their items move into the single Other list and the emptied checklists are deleted.
   New trips are collapsed the same way after seeding, and always have an Other list.
 - **Adding.** Every item is added with the Add-item sheet's required **final destination**
-  step (§18). The only lists you can create are per-store Groceries ("Add store list"); the
-  Other list is automatic.
+  step (§18). **"+ Add item"** is the trip's primary action: a full-width button at the top of
+  the trip screen that opens the list picker. No list is ever created by hand — the Other list
+  and the per-store Groceries lists are both provisioned automatically (§8).
 - **List titles are display-only.** A list's stored `name` never changes (grocery lists key
   off the store name for Supermarket sync and pinned lists), but everywhere a list title is
   shown — card header, print output, add-item picker — it is rendered as **"Buy @ <store>"**

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTrips, useChecklists, useAmenities, useOrdering, useStores, useProcedures } from '@/hooks/useFirestore'
-import { updateTrip, deleteTrip, completeTrip, addChecklist, savePhaseOrder, saveChecklistOrder, saveChecklistPositions, rateTrip, getTripChecklistsWithItems, findOrCreateOtherChecklist, TRIP_STOPS } from '@/lib/firestore'
+import { updateTrip, deleteTrip, completeTrip, savePhaseOrder, saveChecklistOrder, saveChecklistPositions, rateTrip, getTripChecklistsWithItems, findOrCreateOtherChecklist, ensureGroceryChecklists, TRIP_STOPS } from '@/lib/firestore'
 import { checklistTitle } from '@/lib/checklistTitle'
 import { printLists, type PrintList } from '@/lib/print'
 import { useAppStore } from '@/lib/store'
@@ -159,9 +159,7 @@ export function TripDetail() {
   )
   const [menuOpen, setMenuOpen] = useState(false)
   const [addingTo, setAddingTo] = useState<string | null>(null)
-  const [newChecklist, setNewChecklist] = useState<{ name: string; phase: ChecklistPhase; storeId?: string } | null>(null)
   const stores = useStores()
-  const [savingChecklist, setSavingChecklist] = useState(false)
   const [editAmenities, setEditAmenities] = useState<string[] | null>(null)
   const [editTitle, setEditTitle] = useState<string | null>(null)
   const [ratingOpen, setRatingOpen] = useState(false)
@@ -176,6 +174,11 @@ export function TripDetail() {
       findOrCreateOtherChecklist(id)
     }
   }, [id, checklists])
+
+  // …and one Groceries list per store, created automatically (§20).
+  useEffect(() => {
+    if (id && stores.length > 0) ensureGroceryChecklists(id, stores)
+  }, [id, stores])
 
   const trip = trips.find(t => t.id === id)
   if (!trip) return (
@@ -224,25 +227,6 @@ export function TripDetail() {
   async function setStatus(status: Trip['status']) {
     await updateTrip(id!, { status })
     setMenuOpen(false)
-  }
-
-  function canAddChecklist(): boolean {
-    if (!newChecklist) return false
-    return newChecklist.phase === 'grocery' ? !!newChecklist.storeId : !!newChecklist.name.trim()
-  }
-
-  async function handleAddChecklist() {
-    if (!newChecklist || !canAddChecklist()) return
-    setSavingChecklist(true)
-    await addChecklist(id!, {
-      name: newChecklist.name.trim(),
-      phase: newChecklist.phase,
-      // Append at the end of its phase (count all, including hidden).
-      order: checklists.filter(c => c.phase === newChecklist.phase).length,
-      storeId: newChecklist.phase === 'grocery' ? newChecklist.storeId : undefined,
-    })
-    setSavingChecklist(false)
-    setNewChecklist(null)
   }
 
   function handleSectionDragEnd(e: DragEndEvent) {
@@ -332,10 +316,6 @@ export function TripDetail() {
 
   const stop = Math.min(Math.max(currentTrip.currentStop ?? 0, 0), TRIP_STOPS.length - 1)
 
-  // Stores that don't already have a grocery checklist in this trip.
-  const usedGroceryStoreIds = new Set((byPhase.grocery ?? []).map(c => c.storeId).filter(Boolean))
-  const availableGroceryStores = stores.filter(s => !usedGroceryStoreIds.has(s.id))
-
   return (
     <div className="flex flex-col h-dvh bg-gray-50">
       {/* Header */}
@@ -421,24 +401,18 @@ export function TripDetail() {
           )}
           <span className="text-xs text-[#2f6b4f] font-medium ml-1">Edit</span>
         </button>
-        <div className="flex items-center gap-4 px-5 pb-3">
+        <div className="flex flex-col gap-2 px-5 pb-3">
           <button
             onClick={() => setPickingList(true)}
             disabled={visibleChecklists.length === 0}
-            className="flex items-center gap-1 text-sm font-medium text-[#2f6b4f] hover:underline disabled:opacity-40 disabled:hover:no-underline"
+            className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl bg-[#2f6b4f] text-white text-base font-semibold shadow-sm active:scale-[0.99] transition-transform disabled:opacity-40 disabled:active:scale-100"
           >
-            <Plus className="w-4 h-4" /> Add item
-          </button>
-          <button
-            onClick={() => setNewChecklist({ name: '', phase: 'grocery' })}
-            className="flex items-center gap-1 text-sm font-medium text-[#2f6b4f] hover:underline"
-          >
-            <Plus className="w-4 h-4" /> Add store list
+            <Plus className="w-5 h-5" /> Add item
           </button>
           {hiddenCount > 0 && (
             <button
               onClick={() => setShowHidden(v => !v)}
-              className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:underline"
+              className="flex items-center gap-1 self-start text-sm font-medium text-gray-500 hover:underline"
             >
               <Eye className="w-4 h-4" /> {showHidden ? `Hide hidden (${hiddenCount})` : `Show hidden (${hiddenCount})`}
             </button>
@@ -627,39 +601,6 @@ export function TripDetail() {
         </div>
       </Dialog>
 
-      {/* New store list dialog (§20: the only lists you create are per-store
-          Groceries; the single Other list is automatic). */}
-      <Dialog open={!!newChecklist} onClose={() => setNewChecklist(null)} title="New store list">
-        {newChecklist && (
-          <div className="flex flex-col gap-4">
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Store</label>
-              <div className="flex flex-col gap-2">
-                {availableGroceryStores.map(s => (
-                  <button
-                    key={s.id}
-                    onClick={() => setNewChecklist({ ...newChecklist, name: s.name, storeId: s.id })}
-                    className={`text-left py-2.5 px-3 rounded-xl text-sm font-medium border-2 transition-colors ${newChecklist.storeId === s.id ? 'border-[#2f6b4f] bg-[#2f6b4f] text-white' : 'border-gray-200 text-gray-600'}`}
-                  >
-                    {s.name}
-                  </button>
-                ))}
-                {availableGroceryStores.length === 0 && (
-                  <p className="text-sm text-gray-500">
-                    {stores.length === 0
-                      ? 'No stores yet. Add one in Manage → Stores.'
-                      : 'Every store already has a grocery list on this trip.'}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button variant="secondary" className="flex-1" onClick={() => setNewChecklist(null)}>Cancel</Button>
-              <Button className="flex-1" onClick={handleAddChecklist} disabled={savingChecklist || !canAddChecklist()}>Add</Button>
-            </div>
-          </div>
-        )}
-      </Dialog>
     </div>
   )
 }
