@@ -382,6 +382,12 @@ export function TripDetail() {
           >
             <MapPin className="w-4 h-4" />
           </button>
+          {/* Trip route stepper + transition safety procedures (§20) */}
+          {trip.status !== 'completed' && trip.status !== 'cancelled' && (
+            <div className="ml-auto">
+              <TripStepper trip={trip} procedures={procedures} onFinished={openRatingDialog} />
+            </div>
+          )}
         </div>
         <button
           onClick={() => setEditAmenities(trip.amenities)}
@@ -427,11 +433,6 @@ export function TripDetail() {
           </div>
         )}
       </div>
-
-      {/* Trip route stepper + transition safety procedures (§20) */}
-      {trip.status !== 'completed' && trip.status !== 'cancelled' && (
-        <TripStepper trip={trip} procedures={procedures} onFinished={openRatingDialog} />
-      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-8 flex flex-col gap-6">

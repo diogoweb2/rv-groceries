@@ -8,29 +8,15 @@ import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog } from '@/components/ui/dialog'
-import { RigIcon } from '@/components/CampScenes'
-import { Home, Warehouse, Tent, ShieldCheck, ShieldAlert, ArrowRight, Undo2, Plus, X, Check, Flag, type LucideIcon } from 'lucide-react'
+import { Home, Warehouse, Tent, ShieldAlert, ArrowRight, Undo2, Plus, X, Check, Flag, type LucideIcon } from 'lucide-react'
 import type { Trip, Procedure, ProcedureStep } from '@/types'
 
 const STOP_ICONS: LucideIcon[] = [Home, Warehouse, Tent, Warehouse, Home]
 
-// Waypoints of the illustrated trail, in the SVG's 480×100 coordinate space.
-// The same coordinates place the HTML stop markers (as % of the container),
-// so the dots always sit on the drawn road.
-const TRAIL_PTS: [number, number][] = [[24, 66], [132, 34], [240, 66], [348, 34], [456, 66]]
-
-// One smooth road segment between consecutive stops (horizontal tangents at
-// each stop keep the whole trail continuous).
-function segPath([x0, y0]: [number, number], [x1, y1]: [number, number]) {
-  const bend = (x1 - x0) * 0.5
-  return `M ${x0} ${y0} C ${x0 + bend} ${y0}, ${x1 - bend} ${y1}, ${x1} ${y1}`
-}
-
 /**
- * The trip route stepper (§20): shows where the crew is on the fixed
- * Home → Warehouse → Campsite → Warehouse → Home route and gates advancing
- * on the next transition's safety procedure. Drawn as a winding trail the
- * family rig drives along.
+ * The trip route stepper (§20): a compact pill showing which stop of the fixed
+ * Home → Warehouse → Campsite → Warehouse → Home route the crew is at, and one
+ * button to move on — gated on that stop's safety procedure.
  */
 export function TripStepper({ trip, procedures, onFinished }: {
   trip: Trip
@@ -68,95 +54,35 @@ export function TripStepper({ trip, procedures, onFinished }: {
     setNewStep('')
   }
 
-  const [rigX, rigY] = TRAIL_PTS[stop]
+  const StopIcon = STOP_ICONS[stop]
 
   return (
-    <div className="bg-white border-b border-gray-100 px-4 pt-2 pb-3">
-      {/* Illustrated trail */}
-      <div className="relative h-[104px]">
-        <svg viewBox="0 0 480 100" preserveAspectRatio="none" className="absolute inset-x-0 top-0 w-full h-[100px]" aria-hidden>
-          {/* faint scenery: pines tucked into the trail's bends */}
-          <g fill="#cfe0d5">
-            <path d="M76 30 l8 -16 l8 16 Z" />
-            <path d="M186 96 l7 -14 l7 14 Z" />
-            <path d="M292 26 l8 -16 l8 16 Z" />
-            <path d="M406 96 l7 -14 l7 14 Z" />
-          </g>
-          {TRAIL_PTS.slice(0, -1).map((p, i) => {
-            const done = i < stop
-            return (
-              <path
-                key={i}
-                d={segPath(p, TRAIL_PTS[i + 1])}
-                fill="none"
-                stroke={done ? '#2f6b4f' : '#d6d3cb'}
-                strokeWidth={done ? 5 : 4}
-                strokeLinecap="round"
-                strokeDasharray={done ? undefined : '1 10'}
-                className="transition-all duration-500"
-              />
-            )
-          })}
-        </svg>
-
-        {/* Stop markers (HTML, so lucide icons + labels stay crisp) */}
-        {TRIP_STOPS.map((stopLabel, i) => {
-          const Icon = STOP_ICONS[i]
-          const here = i === stop
-          const done = i < stop
-          const [x, y] = TRAIL_PTS[i]
-          return (
-            <div
-              key={i}
-              className="absolute flex flex-col items-center -translate-x-1/2 -translate-y-1/2"
-              style={{ left: `${(x / 480) * 100}%`, top: y }}
-            >
-              <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 shadow-sm transition-colors ${
-                here ? 'border-[#2f6b4f] bg-[#2f6b4f] text-white'
-                : done ? 'border-[#2f6b4f]/40 bg-emerald-50 text-[#2f6b4f]'
-                : 'border-[#d6d3cb] bg-white text-gray-300'
-              }`}>
-                {done ? <Check className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
-              </div>
-              <span className={`absolute top-full mt-0.5 text-[10px] leading-none whitespace-nowrap ${here ? 'font-bold text-[#2f6b4f]' : 'text-gray-400'}`}>
-                {stopLabel}
-              </span>
-            </div>
-          )
-        })}
-
-        {/* The rig, parked above wherever the crew is (glides stop to stop) */}
-        <div
-          className="absolute -translate-x-1/2 transition-all duration-700 ease-in-out pointer-events-none"
-          style={{ left: `${(rigX / 480) * 100}%`, top: rigY - 46 }}
-        >
-          <RigIcon className="w-16 animate-rv-bob drop-shadow-sm" flip={stop % 2 === 1} />
-        </div>
-      </div>
-
-      {/* Next transition / finish */}
-      <div className="flex items-center gap-3 mt-3">
+    <>
+      <div className="flex items-center gap-1.5">
+        <span className="flex items-center gap-1 text-xs font-semibold text-[#2f6b4f] bg-emerald-50 border border-[#2f6b4f]/15 rounded-full pl-2 pr-2.5 py-1">
+          <StopIcon className="w-3.5 h-3.5 shrink-0" />
+          {TRIP_STOPS[stop]}
+        </span>
         <button
           onClick={() => setOpen(true)}
-          className="flex items-center gap-2 flex-1 min-w-0 text-left text-sm font-bold text-[#2f6b4f] bg-emerald-50 border border-[#2f6b4f]/15 rounded-xl px-3 py-2.5 active:bg-emerald-100"
+          className="flex items-center gap-1 text-xs font-semibold text-white bg-[#2f6b4f] rounded-full pl-2.5 pr-2 py-1 active:opacity-80"
+          aria-label={atEnd ? 'Finish trip' : label}
         >
-          <span className="truncate">{atEnd ? 'Finish trip' : label}</span>
-          {pending.length > 0 ? (
-            <span className="flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full shrink-0">
-              <ShieldAlert className="w-3.5 h-3.5" /> {pending.length}
+          {atEnd ? 'Finish' : 'Next'}
+          {pending.length > 0 && (
+            <span className="flex items-center gap-0.5 text-[10px] font-medium text-amber-800 bg-amber-200 px-1 rounded-full">
+              <ShieldAlert className="w-3 h-3" /> {pending.length}
             </span>
-          ) : steps.length > 0 ? (
-            <ShieldCheck className="w-4 h-4 shrink-0" />
-          ) : null}
-          {atEnd ? <Flag className="w-4 h-4 ml-auto shrink-0" /> : <ArrowRight className="w-4 h-4 ml-auto shrink-0" />}
+          )}
+          {atEnd ? <Flag className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
         </button>
         {stop > 0 && (
           <button
             onClick={() => stepBackTripStop(trip)}
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 shrink-0"
+            className="p-1 text-gray-400 hover:text-gray-600"
             aria-label="Step back to the previous stop"
           >
-            <Undo2 className="w-3.5 h-3.5" /> Back
+            <Undo2 className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
@@ -227,6 +153,6 @@ export function TripStepper({ trip, procedures, onFinished }: {
           </div>
         </div>
       </Dialog>
-    </div>
+    </>
   )
 }

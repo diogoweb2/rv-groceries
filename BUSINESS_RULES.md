@@ -601,10 +601,15 @@ See `STAGE_FLOW_SPEC.md` for the design rationale.
 
 ### The route
 
-Fixed **stops**: **Home → Warehouse → Campsite → Warehouse → Home** (index 0–4). The trip
-detail page shows a **route stepper**; `currentStop` lives on the trip (shared live between
-Diogo and Alice). Advancing is **manual** (no date/time automation); a **Back** link steps
-back one stop without losing check state. New trips start at Home (0).
+Fixed **stops**: **Home → Warehouse → Campsite → Warehouse → Home** (index 0–4).
+`currentStop` lives on the trip (shared live between Diogo and Alice). Advancing is **manual**
+(no date/time automation). New trips start at Home (0).
+
+The route is shown as a **compact stepper in the top-right of the trip header**, on the dates
+row: a pill naming the **current stop** (icon + name) and a single **Next** button that opens
+that stop's safety checklist to move on (**Finish** at the last stop). A pending-checks count
+rides on the button while safety steps are unchecked. An **undo** icon beside it steps back
+one stop without losing check state (hidden at Home).
 
 ### What each stop shows
 
