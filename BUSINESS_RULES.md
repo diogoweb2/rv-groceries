@@ -638,6 +638,13 @@ and un-checking removes it again. For an **Other**-list item the handling is the
 check (`stagesDone`), which the checklist card also records at the trip's current stop. An
 item that was never handled simply never enters the route.
 
+**The return warehouse is a catch-up for the campsite.** Stop 3 exists to stow what was
+*forgotten* at the campsite, so an item **checked off at stop 2 does not appear at stop 3** —
+it is already where it belongs and needs no second look. Only the items still unchecked at the
+campsite carry over. Un-checking an item at stop 2 brings it back to stop 3. This does not
+affect stop 4, where destination-**Home** items are still brought inside regardless of where
+they were stowed.
+
 **Remove after completion.** Each item row offers a **"Remove after completion"** toggle in
 its "⋮" overflow menu (the item row itself shows only the checkbox and the destination icon).
 It behaves like the persist pin: it is an **on/off flag** (`removeOnComplete`) that by itself

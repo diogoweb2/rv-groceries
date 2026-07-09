@@ -53,11 +53,17 @@ export function StageView({ trip, checklists }: { trip: Trip; checklists: Checkl
   // stow, sort, or bring inside. An unbought grocery is the same case.
   // "Remove after completion" items are the exception in reverse — being handled
   // is exactly what retires them, so they don't travel on.
+  //
+  // The return warehouse (stop 3) is the catch-up for whatever wasn't stowed at
+  // the campsite (stop 2), so anything already stowed there is done and drops
+  // out. Un-checking it at the campsite brings it back.
   const allItems = checklists
     .flatMap(c => itemsByList[c.id] ?? [])
     .filter(i => {
-      const handledEarlier = handledStops(i, groceryListIds.has(i.checklistId)).some(s => s < stop)
-      return handledEarlier && !i.removeOnComplete
+      const handled = handledStops(i, groceryListIds.has(i.checklistId))
+      const handledEarlier = handled.some(s => s < stop)
+      const stowedAtCampsite = stop === 3 && handled.includes(2)
+      return handledEarlier && !i.removeOnComplete && !stowedAtCampsite
     })
   const shown = stage.itemFilter
     ? allItems.filter(i => stage.itemFilter!(itemDestination(i)))
