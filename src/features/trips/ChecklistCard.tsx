@@ -262,7 +262,9 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
 
       {/* Items */}
       {expanded && (
-        <div className="border-t border-gray-50 rounded-b-2xl overflow-hidden">
+        {/* No `overflow-hidden` here: it would clip the item "⋮" dropdowns of the
+            bottom rows. The last child rounds its own corners instead. */}
+        <div className="border-t border-gray-50 rounded-b-2xl">
           {visibleItems.map(item => (
             <div
               key={item.id}
@@ -392,7 +394,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
           {/* Add item button */}
           <button
             onClick={onAddItem}
-            className="flex items-center gap-2 w-full px-4 py-3 text-sm text-[#2f6b4f] font-medium hover:bg-emerald-50 transition-colors"
+            className="flex items-center gap-2 w-full px-4 py-3 text-sm text-[#2f6b4f] font-medium hover:bg-emerald-50 transition-colors rounded-b-2xl"
           >
             <Plus className="w-4 h-4" />
             Add item
