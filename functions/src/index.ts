@@ -8,6 +8,7 @@
 
 import {setGlobalOptions, logger} from "firebase-functions";
 import {onDocumentCreated} from "firebase-functions/v2/firestore";
+import {onSchedule} from "firebase-functions/v2/scheduler";
 import {onCall, HttpsError} from "firebase-functions/v2/https";
 import {defineSecret} from "firebase-functions/params";
 import {initializeApp} from "firebase-admin/app";
@@ -110,6 +111,8 @@ export const onNotificationCreated = onDocumentCreated(
         title,
         body,
         type: (data.type as string) ?? "general",
+        // Where a tap on the notification takes the user (service worker).
+        url: (data.url as string) ?? "/",
       },
     });
     logger.info(
@@ -134,5 +137,103 @@ export const onNotificationCreated = onDocumentCreated(
     // The notification doc is a one-shot push trigger with no in-app reader, so
     // remove it once delivered to keep the collection from growing unbounded.
     await event.data?.ref.delete();
+  }
+);
+
+const IDENTITIES = ["diogo", "alice"] as const;
+
+/**
+ * Pluralizes the digest's item count.
+ * @param {number} n how many items were added
+ * @return {string} "1 new item" / "3 new items"
+ */
+function plural(n: number): string {
+  return `${n} new item${n === 1 ? "" : "s"}`;
+}
+
+interface DigestEntry {
+  listId: string;
+  store: string;
+  added: number;
+  total: number;
+}
+
+/**
+ * Daily digest of items added to Supermarket lists, at 18:00 Toronto (§15).
+ * One push per person summarising every store touched since the previous run,
+ * rather than a push per item added. Silent on days with no new items.
+ *
+ * "New" means `createdAt` after the last run, so items written before this
+ * feature shipped (no `createdAt`) are never reported.
+ */
+export const dailySupermarketDigest = onSchedule(
+  {schedule: "0 18 * * *", timeZone: "America/Toronto"},
+  async () => {
+    const db = getFirestore();
+    const stateRef = db.collection("internal").doc("supermarketDigest");
+    const now = new Date();
+    const lastRunAt = (await stateRef.get()).data()?.lastRunAt as
+      | string
+      | undefined;
+    // First ever run: look back one day rather than over all history.
+    const since =
+      lastRunAt ?? new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+
+    const listsSnap = await db
+      .collection("supermarketLists")
+      .where("status", "==", "active")
+      .get();
+
+    const touched: DigestEntry[] = [];
+    for (const list of listsSnap.docs) {
+      const items = await list.ref.collection("items").get();
+      const added = items.docs.filter((d) => {
+        const createdAt = d.data().createdAt as string | undefined;
+        return createdAt !== undefined && createdAt > since;
+      }).length;
+      if (added === 0) continue;
+
+      touched.push({
+        listId: list.id,
+        store: (list.data().storeName as string | undefined) ?? "the list",
+        added,
+        total: items.size,
+      });
+    }
+
+    // Record the run even when nothing was added, so a quiet day doesn't make
+    // the next digest re-report items already counted.
+    await stateRef.set({lastRunAt: now.toISOString()}, {merge: true});
+
+    if (touched.length === 0) {
+      logger.info("Supermarket digest: nothing added, no push sent");
+      return;
+    }
+
+    const one = touched.length === 1 ? touched[0] : undefined;
+    const body = one ?
+      `${plural(one.added)} added to ${one.store} (${one.total} in total)` :
+      touched
+        .map((t) =>
+          `${plural(t.added)} added - ${t.store} (${t.total} in total)`)
+        .join("\n");
+    // Tapping the push opens the one store's list, or the tab when several.
+    const url = one ? `/supermarket/${one.listId}` : "/supermarket";
+    logger.info(`Supermarket digest: ${touched.length} store(s)`, {body});
+
+    await Promise.all(
+      IDENTITIES.map((to) =>
+        db.collection("notifications").add({
+          to,
+          from: "system",
+          title: "Supermarket",
+          body,
+          type: "supermarket",
+          url,
+          read: false,
+          createdAt: now.toISOString(),
+        })
+      )
+    );
   }
 );

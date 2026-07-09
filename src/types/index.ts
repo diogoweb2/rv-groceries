@@ -306,6 +306,12 @@ export interface SupermarketItem {
   baseRev: number
   updatedBy: UserIdentity
   updatedAt: string
+  /**
+   * When the item was first added. Feeds the 6pm daily digest (§15), which
+   * reports items created since its last run. Absent on items created before
+   * the digest shipped — those are never counted as new.
+   */
+  createdAt?: string
 }
 
 /**
@@ -331,6 +337,8 @@ export interface AppNotification {
   body: string
   /** Tag for the originating feature, e.g. 'supermarket'. */
   type?: string
+  /** In-app path to open when the native notification is tapped. */
+  url?: string
   createdAt: string
   read: boolean
 }

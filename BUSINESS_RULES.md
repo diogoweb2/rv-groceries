@@ -39,8 +39,12 @@ per-store shopping lists for Diogo; grocery handling also lives inside camping t
 - If granted, an FCM token is obtained, held in app state, **and persisted** to the
   `fcmTokens` collection mapped to the current identity (re-registering or switching identity
   on a device overwrites that device's mapping cleanly).
-- **Delivery.** Cross-user notifications are written by the client as `notifications`
-  documents (each addressed `to` one identity). A Cloud Function (`onNotificationCreated`)
+- **Tap target.** A notification may carry a `url` (an in-app path). Tapping the system
+  notification focuses an already-open app window and navigates it there — or opens a new one —
+  defaulting to Home when no `url` is set.
+- **Delivery.** Cross-user notifications are written as `notifications` documents (each
+  addressed `to` one identity) — by the client, or by a scheduled function for the daily
+  Supermarket digest (§15). A Cloud Function (`onNotificationCreated`)
   looks up the recipient's tokens and sends a real **native/system push** to their devices,
   pruning any tokens the messaging service reports as invalid. The push is delivered as a
   **data-only** message that the service worker renders as exactly one system notification
@@ -415,11 +419,25 @@ supermarket.
   **whether or not**
   everything was bought — the shopper can complete with items still unbought (e.g. something was
   out of stock).
-- **Completion notification.** Completing a list sends a notification (§2) to the **other**
-  person (the shopper who completed is not notified about their own action):
-  - If every item was bought: *"<Name> bought everything on the <store> list"*.
-  - Otherwise: *"<Name> finished the <store> list. Couldn't get: <missed items>"* (the unbought
-    item names).
+- **Completion notification — only when something was missed.** Completing a list with **every
+  item bought sends no notification at all** (that is the expected outcome; silence is the
+  signal). If one or more items were left unbought, a notification (§2) goes to the **other**
+  person (the shopper who completed is never notified about their own action):
+  *"<Name> finished the <store> list. Couldn't get: <missed items>"* (the unbought item names).
+  Tapping it opens the Supermarket tab.
+- **Daily "items added" digest.** Once a day at **18:00 America/Toronto**, a scheduled Cloud
+  Function (`dailySupermarketDigest`) sends **both** people one notification summarising the
+  items added to active Supermarket lists since the previous run — never one push per item.
+  - **Silent when nothing was added.** No new items since the last run ⇒ no notification.
+  - One line per store touched, with that store's new count and its current total:
+    - Single store: *"1 new item added to Costco (5 in total)"*.
+    - Several stores, one line each: *"1 new item added - Costco (5 in total)"* /
+      *"1 new item added - NoFrills/FreshCo (6 in total)"*.
+  - **Tapping it** opens that store's list when only one store was touched, otherwise the
+    Supermarket tab.
+  - "New" is judged by the item's `createdAt` against the last run's timestamp, so items that
+    predate this feature (they have no `createdAt`) are never reported. The run timestamp
+    advances even on silent days, so nothing is ever reported twice.
 - **Camping items (live-linked with trip Groceries, §8).** Any item can be flagged **for
   camping**, either by a per-item tent toggle or by the shorthand **`<name> -> camping`** (also
   `→ camping`) when adding — the suffix is stripped and the item is flagged.

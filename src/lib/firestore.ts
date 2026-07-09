@@ -1806,16 +1806,18 @@ export function subscribeSupermarketItems(listId: string, cb: (items: Supermarke
 
 export async function addSupermarketItem(
   listId: string,
-  data: Omit<SupermarketItem, 'id' | 'listId' | 'rev' | 'baseRev' | 'updatedBy' | 'updatedAt'>,
+  data: Omit<SupermarketItem, 'id' | 'listId' | 'rev' | 'baseRev' | 'updatedBy' | 'updatedAt' | 'createdAt'>,
   identity: UserIdentity,
 ) {
+  const now = new Date().toISOString()
   return addDoc(collection(db, 'supermarketLists', listId, 'items'), clean({
     ...data,
     listId,
     rev: 1,
     baseRev: 0,
     updatedBy: identity,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
+    createdAt: now,
   }))
 }
 
@@ -1971,8 +1973,8 @@ export async function unlinkSupermarketItemFromTrip(item: SupermarketItem, ident
   })
 }
 
-// Mark a list complete: hide it from the active view, record who/when, and notify
-// the other person whether everything was bought or what was missed (§15).
+// Mark a list complete: hide it from the active view, record who/when, and — only
+// when something couldn't be bought — tell the other person what was missed (§15).
 export async function completeSupermarketList(
   list: SupermarketList,
   items: SupermarketItem[],
@@ -1980,11 +1982,6 @@ export async function completeSupermarketList(
   identity: UserIdentity,
 ) {
   const missed = items.filter(i => !i.checked).map(i => i.name)
-  const who = identity === 'diogo' ? 'Diogo' : 'Alice'
-  const title = missed.length === 0 ? 'Shopping done 🎉' : 'Shopping update'
-  const body = missed.length === 0
-    ? `${who} bought everything on the ${storeName} list`
-    : `${who} finished the ${storeName} list. Couldn't get: ${missed.join(', ')}`
 
   await updateDoc(doc(db, 'supermarketLists', list.id), {
     status: 'complete',
@@ -1992,10 +1989,19 @@ export async function completeSupermarketList(
     completedBy: identity,
   })
 
-  // Notify only the other person (§15) — the shopper who completed doesn't get a
-  // notification about their own action.
+  // A fully-bought list is the expected outcome and needs no push (§15). Notify
+  // only the other person — the shopper doesn't get a push about their own action.
+  if (missed.length === 0) return
+  const who = identity === 'diogo' ? 'Diogo' : 'Alice'
   const recipient: UserIdentity = identity === 'diogo' ? 'alice' : 'diogo'
-  await sendNotification({ to: recipient, from: identity, title, body, type: 'supermarket' })
+  await sendNotification({
+    to: recipient,
+    from: identity,
+    title: 'Shopping update',
+    body: `${who} finished the ${storeName} list. Couldn't get: ${missed.join(', ')}`,
+    type: 'supermarket',
+    url: '/supermarket',
+  })
 }
 
 // ── Supermarket auto-sort (learned ordering) ─────────────────────────────────

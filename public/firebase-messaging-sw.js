@@ -23,3 +23,21 @@ messaging.onBackgroundMessage((payload) => {
     data: payload.data,
   })
 })
+
+// Tapping a notification opens the page it points at (e.g. the store's list),
+// reusing an already-open app window rather than spawning a second one.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const path = event.notification.data?.url || '/'
+  const target = new URL(path, self.location.origin)
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      for (const client of windows) {
+        if (new URL(client.url).origin === target.origin) {
+          return client.focus().then((c) => c.navigate(target.href))
+        }
+      }
+      return self.clients.openWindow(target.href)
+    }),
+  )
+})
