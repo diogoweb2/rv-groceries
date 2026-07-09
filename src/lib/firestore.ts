@@ -1150,12 +1150,17 @@ export async function setChecklistItemChecked(
   // The checklist-card checkbox and the stage checkbox are two views of the same
   // "handled" state (§20). Mirror the card check into `stagesDone` at the trip's
   // current stop, so a "remove after completion" item checked from the card also
-  // drops out of the later stops.
-  const stop = await getTripCurrentStop(tripId)
-  const stagesDone = checked
-    ? Array.from(new Set([...(item.stagesDone ?? []), stop]))
-    : (item.stagesDone ?? []).filter(s => s !== stop)
-  await updateItem(tripId, checklist.id, item.id, { checked, stagesDone }, identity, item.rev)
+  // drops out of the later stops. Groceries are exempt: there `checked` means
+  // "bought", which is what puts the item into the stops, not a stop's handling.
+  if (checklist.phase === 'grocery') {
+    await toggleItem(tripId, checklist.id, item.id, checked, identity, item.rev)
+  } else {
+    const stop = await getTripCurrentStop(tripId)
+    const stagesDone = checked
+      ? Array.from(new Set([...(item.stagesDone ?? []), stop]))
+      : (item.stagesDone ?? []).filter(s => s !== stop)
+    await updateItem(tripId, checklist.id, item.id, { checked, stagesDone }, identity, item.rev)
+  }
 
   if (item.persist) {
     if (checked) {
