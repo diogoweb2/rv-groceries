@@ -5,17 +5,18 @@ import { useAppStore } from '@/lib/store'
 import { Sheet } from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
 import { Search, Plus } from 'lucide-react'
-import { DESTINATIONS } from './destination'
+import { destinationIcon } from './destination'
 import { checklistTitle } from '@/lib/checklistTitle'
 import type { CatalogItem, Checklist, ChecklistItem, ItemDestination } from '@/types'
 
 // Step 2 of adding an item (§18): pick the item's final destination. Required —
 // there is no skip. (Pinning to future trips is done later, on the item row.)
-const DESTINATION_HINTS: Record<ItemDestination, string> = {
-  home: 'Comes camping, must come back home',
-  truck: 'Stays in the truck',
-  rv: 'Stays in the RV',
-}
+// Self-explanatory phrasings, in the order the sheet offers them.
+const DESTINATION_CHOICES: { value: ItemDestination; label: string }[] = [
+  { value: 'home', label: 'Bring back Home' },
+  { value: 'rv', label: 'Stays in the RV' },
+  { value: 'truck', label: 'Stays in the truck' },
+]
 
 interface Props {
   tripId: string
@@ -130,24 +131,21 @@ export function AddItemSheet({ tripId, checklist, onClose }: Props) {
   // Step 2 — after an item is added, ask where it finally belongs (§18).
   if (pending) {
     return (
-      <Sheet open onClose={onClose} title={`Add to ${checklistTitle(checklist)}`}>
+      <Sheet open onClose={onClose} title={`Final destination for ${pending.name}?`}>
         <div className="p-5 flex flex-col gap-4">
-          <p className="text-center text-gray-500 text-sm">
-            Added <strong className="text-gray-800">{pending.name}</strong> — where does it belong after the trip?
-          </p>
-          {DESTINATIONS.map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => applyPendingDestination(opt.value)}
-              className="flex items-center gap-3 w-full rounded-2xl border-2 border-gray-200 px-4 py-4 text-left hover:border-[#2f6b4f] hover:bg-emerald-50 transition-colors"
-            >
-              <opt.icon className="w-6 h-6 text-[#2f6b4f] shrink-0" />
-              <span className="flex flex-col">
+          {DESTINATION_CHOICES.map(opt => {
+            const Icon = destinationIcon(opt.value)
+            return (
+              <button
+                key={opt.value}
+                onClick={() => applyPendingDestination(opt.value)}
+                className="flex items-center gap-3 w-full rounded-2xl border-2 border-gray-200 px-4 py-4 text-left hover:border-[#2f6b4f] hover:bg-emerald-50 transition-colors"
+              >
+                <Icon className="w-6 h-6 text-[#2f6b4f] shrink-0" />
                 <span className="text-base font-semibold text-gray-800">{opt.label}</span>
-                <span className="text-xs text-gray-500">{DESTINATION_HINTS[opt.value]}</span>
-              </span>
-            </button>
-          ))}
+              </button>
+            )
+          })}
         </div>
       </Sheet>
     )

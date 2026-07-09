@@ -518,11 +518,12 @@ the item must come back home; it supersedes the old "bring it back" flag (legacy
 `bringBack: true` items read as destination Home until a destination is set).
 
 - **Set at add time (2-step flow, required).** Adding an item in the Add-item sheet is a
-  two-step flow: after the user creates or picks an item, a follow-up screen asks for its
-  final destination — **Home** ("comes camping, must come back home"), **Truck** ("stays in
-  the truck"), or **RV** ("stays in the RV"). There is **no skip** and no pin option here
-  (pinning to future trips, §12, is done later on the item row). Choosing returns to the
-  search field for the next item.
+  two-step flow: after the user creates or picks an item, a follow-up screen titled
+  **"Final destination for &lt;item&gt;?"** offers three self-explanatory choices, in order:
+  **"Bring back Home"**, **"Stays in the RV"**, **"Stays in the truck"**. No hint text, no
+  restatement of what was just added. There is **no skip** and no pin option here (pinning to
+  future trips, §12, is done later on the item row). Choosing returns to the search field for
+  the next item.
 - **Row icon, tap to cycle.** Each item row shows its destination as an icon (house / truck
   / caravan; a gray map-pin when unset, e.g. old items). Tapping the icon **cycles**
   Home → Truck → RV, so the destination can be changed at any time. Shown in every phase.
