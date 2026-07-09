@@ -3,12 +3,11 @@ import { useChecklistItems } from '@/hooks/useFirestore'
 import {
   TRIP_STAGES, TRIP_STOPS, displayedDestination,
   setStageItemDone, setItemDestination, itemDestination,
-  deleteChecklistItemAndPropagate,
 } from '@/lib/firestore'
 import { destinationMeta, destinationIcon, nextDestination } from './destination'
 import { useAppStore } from '@/lib/store'
 import { Progress } from '@/components/ui/progress'
-import { Trash2, ShieldAlert, Check } from 'lucide-react'
+import { ShieldAlert, Check } from 'lucide-react'
 import type { Trip, Checklist, ChecklistItem, ItemDestination } from '@/types'
 
 // Invisible collector: subscribes to one checklist's items and lifts them up so
@@ -79,11 +78,6 @@ export function StageView({ trip, checklists }: { trip: Trip; checklists: Checkl
     const cl = checklists.find(c => c.id === item.checklistId)
     if (cl) await setItemDestination(trip.id, cl, item, nextDestination(itemDestination(item)), identity)
   }
-  async function remove(item: ChecklistItem) {
-    const cl = checklists.find(c => c.id === item.checklistId)
-    if (cl) await deleteChecklistItemAndPropagate(trip.id, cl, item)
-  }
-
   // Group shown items by their *displayed* destination (Home→Truck where the
   // stage remaps it), so RV vs truck reads at a glance.
   const groups: { dest: ItemDestination; items: ChecklistItem[] }[] = []
@@ -151,9 +145,6 @@ export function StageView({ trip, checklists }: { trip: Trip; checklists: Checkl
                         className="p-2.5 -m-1 text-[#2f6b4f]"
                       >
                         <DispIcon className="w-5 h-5" />
-                      </button>
-                      <button onClick={() => remove(item)} className="text-gray-300 hover:text-red-400 p-2.5 -m-1" aria-label="Delete item">
-                        <Trash2 className="w-5 h-5" />
                       </button>
                     </div>
                   )

@@ -632,6 +632,11 @@ at Home).
   items only. Then the **final** *Arriving home* safety checklist, whose **Finish trip**
   action marks the trip complete and opens the **star rating** prompt (§14).
 
+**No deleting from the derived stop views.** Rows at stops 2–4 offer only the done checkbox and
+the destination toggle — there is no delete action. Once the trip is under way an item is a
+thing physically in the truck, not a line to edit; removing items from the trip is done at
+**stop 0 (Home)**, on the editable checklists.
+
 **Only what was handled travels to the next stop.** The derived stop views (stops 2–4) draw
 from every checklist, but an item appears at a stop **only if it was checked off at an earlier
 stop**. An item left unchecked never made it into the truck — it wasn't found, or the user
