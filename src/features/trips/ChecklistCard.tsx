@@ -260,10 +260,8 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
         </div>
       </div>
 
-      {/* Items */}
+      {/* Items. No overflow-hidden: it would clip the bottom rows' "⋮" dropdowns. */}
       {expanded && (
-        {/* No `overflow-hidden` here: it would clip the item "⋮" dropdowns of the
-            bottom rows. The last child rounds its own corners instead. */}
         <div className="border-t border-gray-50 rounded-b-2xl">
           {visibleItems.map(item => (
             <div
