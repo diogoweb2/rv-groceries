@@ -31,7 +31,6 @@ export function StoresPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Delete this store?')) return
     try {
       await deleteStore(id)
     } catch (e) {

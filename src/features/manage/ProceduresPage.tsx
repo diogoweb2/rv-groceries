@@ -79,7 +79,6 @@ export function ProceduresPage() {
   }
 
   async function handleDelete(transitionId: TransitionId, step: ProcedureStep) {
-    if (!confirm(`Remove "${step.text}" from every trip?`)) return
     await removeProcedureStep(transitionId, step)
   }
 

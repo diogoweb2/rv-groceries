@@ -68,7 +68,6 @@ export function TemplatesPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Delete template?')) return
     await deleteTemplate(id)
   }
 

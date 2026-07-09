@@ -69,8 +69,8 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
     savePinnedChecklist(checklist.name, checklist.phase, items, identity)
   }, [items, checklist.pinned, checklist.name, checklist.phase, identity])
 
-  // Ask to hide a checklist the moment it becomes 100% complete (§5). Skip the
-  // first meaningful load so an already-complete list on open doesn't prompt.
+  // Hide a checklist the moment it becomes 100% complete (§5). Skip the first
+  // meaningful load so an already-complete list on open isn't hidden.
   const completeRef = useRef<boolean | null>(null)
   useEffect(() => {
     if (total === 0) return
@@ -81,11 +81,9 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
     }
     // Store-linked grocery checklists are managed from the Supermarket side and
     // are routinely "all bought" — auto-hiding them would swallow items the user
-    // expects to see mirrored into the trip. Only prompt for hand-made lists.
+    // expects to see mirrored into the trip. Only auto-hide hand-made lists.
     if (isComplete && !completeRef.current && !checklist.hidden && !isGrocery) {
-      if (confirm(`"${checklistTitle(checklist)}" is all done — hide it for this trip?`)) {
-        updateChecklist(tripId, checklist.id, { hidden: true })
-      }
+      updateChecklist(tripId, checklist.id, { hidden: true })
     }
     completeRef.current = isComplete
   }, [checked, total, checklist.hidden, checklist.name, checklist.id, tripId, isGrocery])
@@ -120,7 +118,6 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
   }
 
   async function handleDeleteItem(item: ChecklistItem) {
-    if (!confirm(`Remove "${item.name}" from this checklist?`)) return
     await deleteChecklistItemAndPropagate(tripId, checklist, item)
   }
 
@@ -170,7 +167,6 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
 
   async function handleDeleteChecklist() {
     setMenuOpen(false)
-    if (!confirm(`Delete checklist "${checklistTitle(checklist)}" and all its items?`)) return
     if (checklist.pinned) {
       await removePinnedChecklist(checklist.phase, checklist.name)
     }

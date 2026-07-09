@@ -61,7 +61,6 @@ export function GroceryHome() {
 
   async function handleDelete(e: React.MouseEvent, id: string) {
     e.stopPropagation()
-    if (!confirm('Delete this list? This cannot be undone.')) return
     await deleteGroceryList(id)
   }
 

@@ -221,7 +221,6 @@ export function TripDetail() {
   }
 
   async function handleDelete() {
-    if (!confirm('Delete this trip?')) return
     await deleteTrip(id!)
     navigate('/trips', { replace: true })
   }

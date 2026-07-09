@@ -355,27 +355,19 @@ export function SupermarketDetail() {
     }
   }
 
-  // Swipe-right-to-delete removes the item and, if it's live-linked to a trip
-  // grocery item, that copy too (§8/§15).
+  // Removes the item and, if it's live-linked to a trip grocery item, that copy
+  // too (§8/§15). Reached by swipe-right or the row's "⋮" menu.
   async function handleDelete(item: SupermarketItem) {
     setItems(items.filter(i => i.id !== item.id))
     await deleteSupermarketItemAndPropagate(item)
   }
 
-  // Same deletion from the row's "⋮" menu, where there's no swipe gesture to
-  // make the intent obvious — so confirm first.
   async function handleRemove(item: SupermarketItem) {
-    if (!confirm(`Remove "${item.name}" from this list?`)) return
     await handleDelete(item)
   }
 
   async function handleComplete() {
     if (!list) return
-    const missed = items.filter(i => !i.checked).length
-    const msg = missed === 0
-      ? 'Mark this list complete? The other person will be notified you got everything.'
-      : `Mark complete with ${missed} item(s) not bought? The other person will be notified what you missed.`
-    if (!confirm(msg)) return
     setCompleting(true)
     await completeSupermarketList(list, items, storeLabel(stores, list), identity)
     setCompleting(false)

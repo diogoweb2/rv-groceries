@@ -84,7 +84,6 @@ export function TripsList() {
 
   async function handleDelete(e: React.MouseEvent, id: string) {
     e.stopPropagation()
-    if (!confirm('Delete this trip? This cannot be undone.')) return
     await deleteTrip(id)
   }
 

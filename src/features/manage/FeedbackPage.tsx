@@ -165,7 +165,6 @@ export function FeedbackPage() {
 
   // Permanently remove a completed entry from the Completed view.
   async function handleDelete(item: Feedback) {
-    if (!confirm('Delete this entry permanently?')) return
     setItems(items.filter(i => i.id !== item.id))
     await deleteFeedback(item.id)
   }

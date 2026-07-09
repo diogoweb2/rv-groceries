@@ -177,7 +177,6 @@ export function GroceryDetail() {
   }
 
   async function handleSend() {
-    if (!confirm('Send this list?')) return
     setSending(true)
     await sendGroceryList(id!)
     setSending(false)

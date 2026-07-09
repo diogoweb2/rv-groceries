@@ -86,7 +86,7 @@ per-store shopping lists for Diogo; grocery handling also lives inside camping t
   chips or menu → Edit amenities). Editing amenities updates the trip record and future stats,
   but does **not** retroactively change items already suggested into checklists.
 - **Deletion** removes the trip and **all nested checklists and their items** (no orphaned
-  data). Requires confirmation.
+  data). It takes effect immediately, with no confirmation.
 - **Auto-checklists on creation.** When a trip is created, one checklist is generated per
   *pinned checklist* snapshot (see §13), pre-filled with that snapshot's items (all
   unchecked). The generated checklists follow the **remembered ordering** (see §5): phase
@@ -139,7 +139,7 @@ The Home screen focuses on a single trip, chosen in this priority:
   trip (backpack), Day of departure (truck), Pack down / return (open package), Groceries
   (shopping cart).
 - Checklists can be **renamed** and **deleted**. Deleting a checklist removes all its items
-  first (no orphans) and requires confirmation.
+  first (no orphans) and takes effect immediately, with no confirmation.
 - **Hide a checklist for this trip.** Each checklist's menu has **"Hide for this trip"**
   (**"Unhide"** when hidden). Hiding means "I'm not doing anything about this list on this
   trip" — it works even if the list still has unchecked items. A hidden checklist is collapsed
@@ -149,10 +149,10 @@ The Home screen focuses on a single trip, chosen in this priority:
     toggle link appears in the header (next to "+ Add checklist"). Toggling it reveals the
     hidden checklists (dimmed, with a **Hidden** badge) so they can be unhidden; toggling again
     re-collapses them.
-  - **Auto-hide prompt on completion.** The moment a checklist becomes **100% complete** (its
-    last item is checked), the user is asked whether to hide it for this trip. Declining leaves
-    it visible. A list that is already complete when the trip is opened does not re-prompt.
-    **Store-linked grocery checklists are exempt** — their items are managed from the Supermarket
+  - **Auto-hide on completion.** The moment a checklist becomes **100% complete** (its last
+    item is checked), it is hidden for this trip automatically, with no confirmation; it can be
+    unhidden from the "Show hidden" toggle. A list that is already complete when the trip is
+    opened is left visible. **Store-linked grocery checklists are exempt** — their items are managed from the Supermarket
     side and being "all bought" is their normal state, so auto-hiding them would swallow items
     the user expects to see mirrored into the trip (§8). They can still be hidden manually.
 - **Completed items sort to the bottom.** Inside an expanded checklist card, checked (completed)
@@ -276,6 +276,10 @@ The `itemCatalog` collection is the **single global source** for item autocomple
   (Firestore rejects them). Optional fields are simply omitted when absent.
 - **Cascading deletes.** Deleting a trip, checklist, or grocery list also deletes its nested
   items so no orphaned subcollection data remains.
+- **No confirmation dialogs.** No action anywhere in the app asks the user to confirm — every
+  action, including destructive and irreversible ones (deleting a trip, checklist, item,
+  catalog entry, store, template, procedure step, or feedback entry) and every notifying one
+  (sending or completing a Supermarket list), applies immediately on tap.
 - **Revisions.** Item writes carry `rev` / `baseRev` for future conflict handling; each update
   bumps `rev` and records `updatedBy` / `updatedAt`.
 - **Offline-first.** Firestore persistent local cache is enabled (multi-tab), so reads/writes
@@ -445,8 +449,7 @@ supermarket.
   with no confirmation (revealing a red delete affordance as it slides). The horizontal swipe is
   tracked independently from the vertical drag-reorder handle so the two don't conflict.
 - **"Remove item" menu action.** Each row also has a "⋮" overflow menu whose **Remove item**
-  action deletes the row after a **confirmation** (the swipe gesture is self-evident; a menu tap
-  is not). The row's other tap actions are the bought check, the `+`/`-` stepper, and a tent
+  action deletes the row immediately, with no confirmation. The row's other tap actions are the bought check, the `+`/`-` stepper, and a tent
   (camping) toggle, kept large for easy tapping. However it's deleted, removing a live-linked
   camping item also removes its trip grocery copy (§8); deleting from the trip side still
   propagates here too.
@@ -494,7 +497,7 @@ A shared, sortable to-do list for logging bugs and improvement ideas, reached fr
   filter, where the (now filled) check button un-completes it — restoring it to the working
   list — so a mistaken completion can be undone.
 - **Permanent delete.** A completed entry can be removed for good via a trash button (shown
-  only in the Completed view), after a confirmation. Active entries have no delete — the
+  only in the Completed view), with no confirmation. Active entries have no delete — the
   path to removal is complete → (optionally) delete.
 - **Drag-and-drop sorting.** Entries can be reordered by dragging (via a grip handle); the
   order is remembered globally. Reordering while a filter is active moves the visible rows
@@ -668,7 +671,7 @@ items whose flag changed and closes the sheet, and closing without saving discar
 edits. The flag written is the same `removeOnComplete` described above.
 
 **Remove item.** The same "⋮" menu offers **"Remove item"**, which deletes the item from the
-checklist after a confirmation. If the item is live-linked to a Supermarket item, that copy is
+checklist immediately, with no confirmation. If the item is live-linked to a Supermarket item, that copy is
 deleted too (§8/§15), and a pinned item is dropped from the recurring set (§12). Checked items
 that should merely be hidden rather than deleted are handled by the card's "Hide completed"
 toggle (§5).
@@ -694,7 +697,7 @@ the displayed icon is remapped Home→Truck at stops 2 and 3 (stored destination
   - *Arriving home (final checks):* truck unloaded, fridge/cooler emptied, trailer locked.
 - **Editing is global**, in two places: quick add/remove inside a stop's dialog, and the full
   editor at **Manage → Safety checklists** (one section per checklist, incl. *Arriving home*),
-  with add, rename, delete (confirmed), and drag-and-drop reorder. Renaming/reordering
+  with add, rename, delete (immediate, unconfirmed), and drag-and-drop reorder. Renaming/reordering
   preserves step identity, so per-trip check state is unaffected.
 - **Per-trip check state** on the trip document, per procedure id, synced live and reset each
   trip. (The warehouse is visited twice via two distinct ids, each with its own state.)

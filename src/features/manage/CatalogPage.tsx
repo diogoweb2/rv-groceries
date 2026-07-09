@@ -64,7 +64,6 @@ export function CatalogPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Delete from catalog?')) return
     await deleteCatalogItem(id)
   }
 

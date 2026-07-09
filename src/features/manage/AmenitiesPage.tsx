@@ -34,7 +34,6 @@ export function AmenitiesPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Delete this amenity?')) return
     await deleteAmenity(id)
   }
 
