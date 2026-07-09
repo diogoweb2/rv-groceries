@@ -296,7 +296,8 @@ The `itemCatalog` collection is the **single global source** for item autocomple
 
 ## 12. Persistent (recurring) items
 
-Any item in a trip checklist can be marked **persistent** (a pin toggle on the item row).
+Any item in a trip checklist can be marked **persistent** ("Pin to next trip" in the item row's
+"⋮" overflow menu; the active state is shown by a filled pin and a check mark).
 A persistent item carries over to **future** trips so the user doesn't have to re-add it.
 
 - **Recur until checked.** A persistent item re-appears in every newly-created trip **as
@@ -604,8 +605,9 @@ back one stop without losing check state. New trips start at Home (0).
   items only. Then the **final** *Arriving home* safety checklist, whose **Finish trip**
   action marks the trip complete and opens the **star rating** prompt (§14).
 
-**Complete for the whole trip.** Each item row (at the Home stop) has a **Complete** action
-(the circle-check icon that replaced the row's trash). Completing sets a trip-wide `completed`
+**Complete for the whole trip.** Each item row (at the Home stop) offers **"Remove after
+completion"** in its "⋮" overflow menu (the item row itself shows only the checkbox and the
+destination icon). Completing sets a trip-wide `completed`
 flag *and* checks the item, and sinks it to the bottom of its list. A **completed item is
 hidden from every stop's derived view** — once you're done with something, it stops
 reappearing at the campsite, warehouse, or arrival. Completion is independent of the persist

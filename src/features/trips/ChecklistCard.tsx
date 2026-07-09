@@ -12,7 +12,7 @@ import { Progress } from '@/components/ui/progress'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin, EyeOff, Eye, CircleCheck, CircleDashed, Printer } from 'lucide-react'
+import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin, EyeOff, Eye, Check, CircleCheck, CircleDashed, Printer } from 'lucide-react'
 import { printLists } from '@/lib/print'
 import { destinationMeta, destinationIcon, nextDestination } from './destination'
 import type { Checklist, ChecklistItem } from '@/types'
@@ -39,6 +39,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
   const stores = useStores()
   const [expanded, setExpanded] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [itemMenu, setItemMenu] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [showCompleted, setShowCompleted] = useState(true)
   const isGrocery = checklist.phase === 'grocery'
@@ -311,16 +312,6 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
                 </div>
               )}
 
-              {/* Persist (carry to future trips until checked) */}
-              <button
-                onClick={() => handleTogglePersist(item)}
-                aria-label={item.persist ? 'Stop carrying to future trips' : 'Carry to future trips'}
-                aria-pressed={!!item.persist}
-                className={`p-2.5 -m-1 ${item.persist ? 'text-[#2f6b4f]' : 'text-gray-300 hover:text-gray-500'}`}
-              >
-                <Pin className={`w-5 h-5 ${item.persist ? 'fill-current' : ''}`} />
-              </button>
-
               {/* Final destination (§18): Home / Truck / RV — tap to cycle */}
               {(() => {
                 const dest = itemDestination(item)
@@ -337,16 +328,39 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
                 )
               })()}
 
-              {/* Complete for the whole trip (§20): hides it from every later
-                  stop. Completed items can be hidden via the card menu. */}
-              <button
-                onClick={() => handleToggleComplete(item)}
-                aria-label={item.completed ? 'Un-complete (show again this trip)' : 'Complete for the whole trip'}
-                aria-pressed={!!item.completed}
-                className={`p-2.5 -m-1 ${item.completed ? 'text-[#2f6b4f]' : 'text-gray-300 hover:text-[#2f6b4f]'}`}
-              >
-                <CircleCheck className="w-5 h-5" />
-              </button>
+              {/* Item menu: persist (§12) and complete-for-trip (§20) */}
+              <div className="relative shrink-0">
+                <button
+                  onClick={() => setItemMenu(v => (v === item.id ? null : item.id))}
+                  aria-label="Item actions"
+                  className="p-2.5 -m-1 text-gray-300 hover:text-gray-500"
+                >
+                  <MoreVertical className="w-5 h-5" />
+                </button>
+                {itemMenu === item.id && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setItemMenu(null)} />
+                    <div className="absolute right-0 top-full z-20 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-56">
+                      <button
+                        onClick={() => { setItemMenu(null); handleTogglePersist(item) }}
+                        className={`flex items-center gap-2 w-full px-4 py-2.5 text-sm hover:bg-gray-50 ${item.persist ? 'text-[#2f6b4f]' : 'text-gray-700'}`}
+                      >
+                        <Pin className={`w-4 h-4 shrink-0 ${item.persist ? 'fill-current' : ''}`} />
+                        <span className="flex-1 text-left">Pin to next trip</span>
+                        {item.persist && <Check className="w-4 h-4 shrink-0" />}
+                      </button>
+                      <button
+                        onClick={() => { setItemMenu(null); handleToggleComplete(item) }}
+                        className={`flex items-center gap-2 w-full px-4 py-2.5 text-sm hover:bg-gray-50 ${item.completed ? 'text-[#2f6b4f]' : 'text-gray-700'}`}
+                      >
+                        <CircleCheck className="w-4 h-4 shrink-0" />
+                        <span className="flex-1 text-left">Remove after completion</span>
+                        {item.completed && <Check className="w-4 h-4 shrink-0" />}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           ))}
 
