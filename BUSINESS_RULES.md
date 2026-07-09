@@ -606,10 +606,11 @@ Fixed **stops**: **Home → Warehouse → Campsite → Warehouse → Home** (ind
 (no date/time automation). New trips start at Home (0).
 
 The route is shown as a **compact stepper in the top-right of the trip header**, on the dates
-row: a pill naming the **current stop** (icon + name) and a single **Next** button that opens
-that stop's safety checklist to move on (**Finish** at the last stop). A pending-checks count
-rides on the button while safety steps are unchecked. An **undo** icon beside it steps back
-one stop without losing check state (hidden at Home).
+row: the **current stop's icon** (Home / Warehouse / Tent — no label, no background) followed
+by a secondary **Next** text link that opens that stop's safety checklist to move on
+(**Finish** at the last stop). A pending-checks count rides on the link while safety steps are
+unchecked. An **undo** icon beside it steps back one stop without losing check state (hidden
+at Home).
 
 ### What each stop shows
 
