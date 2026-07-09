@@ -38,7 +38,6 @@ export function TripStepper({ trip, procedures, onFinished }: {
   const pending = steps.filter(s => !checkedIds.has(s.id))
 
   async function handleAdvance(skip: boolean) {
-    if (skip && !confirm(`Skip ${pending.length} unchecked safety ${pending.length === 1 ? 'step' : 'steps'} and ${atEnd ? 'finish' : 'advance'}?`)) return
     if (atEnd) {
       await completeTrip(trip, identity)
       onFinished?.()

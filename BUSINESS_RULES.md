@@ -683,7 +683,7 @@ the displayed icon is remapped Home→Truck at stops 2 and 3 (stored destination
   trip. (The warehouse is visited twice via two distinct ids, each with its own state.)
 - **Interrupt on advance/finish (blocking-ish).** Opening the dialog, advancing/finishing is
   enabled only once every step is checked; with steps pending the only way through is an
-  explicit **Skip (N)** (confirmed), which records the skipped step ids + timestamp. Advancing
+  explicit **Skip (N)**, which records the skipped step ids + timestamp. Advancing
   records who/when. Never a hard lock.
 - **Home dashboard.** Once a trip is active (or moving), the Home trip card shows a "right
   now" line: current stop, the next/finish procedure, and its pending-check count.
