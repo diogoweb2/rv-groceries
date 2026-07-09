@@ -4,7 +4,6 @@ import { addItem, ensureCatalogItem, mirrorGroceryItemToSupermarket, setItemDest
 import { useAppStore } from '@/lib/store'
 import { Sheet } from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 import { Search, Plus } from 'lucide-react'
 import { DESTINATIONS } from './destination'
 import { checklistTitle } from '@/lib/checklistTitle'
@@ -210,12 +209,6 @@ export function AddItemSheet({ tripId, checklist, onClose }: Props) {
             Type to search the item catalog
           </p>
         )}
-      </div>
-
-      <div className="p-4">
-        <Button variant="secondary" size="lg" className="w-full" onClick={onClose}>
-          Done
-        </Button>
       </div>
     </Sheet>
   )
