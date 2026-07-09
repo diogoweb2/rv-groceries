@@ -65,7 +65,7 @@ export function TripStepper({ trip, procedures, onFinished }: {
         </span>
         <button
           onClick={() => setOpen(true)}
-          className="flex items-center gap-1 text-xs font-semibold text-white bg-[#2f6b4f] rounded-full pl-2.5 pr-2 py-1 active:opacity-80"
+          className="flex items-center gap-1 text-xs font-semibold text-[#2f6b4f] rounded-full px-1.5 py-1 hover:underline active:opacity-70"
           aria-label={atEnd ? 'Finish trip' : label}
         >
           {atEnd ? 'Finish' : 'Next'}
