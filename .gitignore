@@ -36,3 +36,6 @@ firebase-debug.log
 firestore-debug.log
 ui-debug.log
 functions/node_modules/
+
+# Claude Code local settings (machine-specific permissions)
+.claude/settings.local.json

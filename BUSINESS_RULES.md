@@ -11,10 +11,17 @@ per-store shopping lists for Diogo; grocery handling also lives inside camping t
 
 ## 1. Authentication & Identity
 
-- **App PIN gate.** On launch, the user enters a shared app PIN. It is verified
+- **App PIN gate.** On launch, the user enters a shared **4-digit numeric PIN** on an
+  on-screen keypad (digits shown as filled dots; a delete key removes the last digit;
+  a physical keyboard's number keys and Backspace work too). The PIN **submits itself**
+  as soon as the 4th digit is entered — there is no Continue button. It is verified
   **server-side** by the `exchangePin` Cloud Function (the PIN lives only in the
   `APP_PIN` function secret — no credentials ship in the client bundle). A wrong PIN
-  shows "Wrong password"; verification requires connectivity.
+  shows "Wrong PIN" and clears the entry; verification requires connectivity. Any other
+  failure shows "Sign-in failed — check the console" and logs the underlying error code.
+- **Runtime IAM requirement.** Minting the custom token calls `createCustomToken`, which
+  requires the functions' runtime service account to hold `roles/iam.serviceAccountTokenCreator`.
+  Without it every sign-in fails with `auth/insufficient-permission`.
 - **Brute-force lockout.** After 5 consecutive wrong PINs (globally), sign-in is locked
   for 15 minutes ("Too many attempts").
 - **Custom-token session.** A correct PIN returns a Firebase custom token; the client

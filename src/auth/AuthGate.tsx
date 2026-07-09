@@ -5,10 +5,13 @@ import { auth, getMessagingInstance } from '@/lib/firebase'
 import { saveFcmToken } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import type { UserIdentity } from '@/types'
-import { Tent, Loader2 } from 'lucide-react'
+import { Tent, Loader2, Delete } from 'lucide-react'
 import { RigIcon, Campfire, Stars } from '@/components/CampScenes'
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string
+
+// Number of digits in the shared app PIN. Must match the `APP_PIN` secret.
+const PIN_LENGTH = 4
 
 // Obtain this device's push token and persist it mapped to the given identity so
 // a Cloud Function can target the right person. `prompt` requests notification
@@ -67,6 +70,49 @@ async function listenForegroundMessages() {
 // The PIN is verified server-side by the `exchangePin` Cloud Function, which
 // returns a Firebase custom token — no credentials ever ship in the bundle.
 
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'] as const
+
+function Keypad({
+  onDigit,
+  onDelete,
+  disabled,
+}: {
+  onDigit: (d: string) => void
+  onDelete: () => void
+  disabled: boolean
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      {KEYS.map((key, i) =>
+        key === '' ? (
+          <div key={i} />
+        ) : key === 'del' ? (
+          <button
+            key={i}
+            type="button"
+            onClick={onDelete}
+            disabled={disabled}
+            aria-label="Delete"
+            className="h-16 rounded-2xl text-gray-500 flex items-center justify-center active:bg-gray-100 disabled:opacity-40 transition-colors"
+          >
+            <Delete className="w-6 h-6" strokeWidth={1.75} />
+          </button>
+        ) : (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onDigit(key)}
+            disabled={disabled}
+            className="h-16 rounded-2xl bg-gray-50 text-2xl font-semibold text-gray-800 active:bg-gray-200 disabled:opacity-40 transition-colors"
+          >
+            {key}
+          </button>
+        ),
+      )}
+    </div>
+  )
+}
+
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, identity, setAuthenticated, setIdentity, setFcmToken } = useAppStore()
   const [step, setStep] = useState<'pin' | 'identity' | 'done'>('pin')
@@ -88,27 +134,59 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     listenForegroundMessages()
   }, [isAuthenticated, identity, setFcmToken])
 
-  async function handlePin(e: React.FormEvent) {
-    e.preventDefault()
+  async function submitPin(value: string) {
     setLoading(true)
     try {
       const exchangePin = httpsCallable<{ pin: string }, { token: string }>(
         getFunctions(auth.app),
         'exchangePin',
       )
-      const { data } = await exchangePin({ pin })
+      const { data } = await exchangePin({ pin: value })
       await signInWithCustomToken(auth, data.token)
       setAuthenticated(true)
       setStep('identity')
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code
-      if (code === 'functions/permission-denied') setError('Wrong password')
+      if (code === 'functions/permission-denied') setError('Wrong PIN')
       else if (code === 'functions/resource-exhausted') setError('Too many attempts — try again in 15 minutes')
-      else setError('Connection error — try again')
+      else {
+        // Anything else — a server-side throw, a missing/undeployed function, a real
+        // network failure — reaches the user as the same vague message, so surface the
+        // underlying cause where it can actually be debugged.
+        console.error('Sign-in failed:', code ?? 'unknown', err)
+        setError('Sign-in failed — check the console')
+      }
+      setPin('')
     } finally {
       setLoading(false)
     }
   }
+
+  // A complete PIN submits itself — no Continue button to reach for one-handed.
+  function pushDigit(d: string) {
+    if (loading || pin.length >= PIN_LENGTH) return
+    setError('')
+    const next = pin + d
+    setPin(next)
+    if (next.length === PIN_LENGTH) submitPin(next)
+  }
+
+  function popDigit() {
+    if (loading) return
+    setError('')
+    setPin((p) => p.slice(0, -1))
+  }
+
+  // Physical keyboards (desktop, iPad case) should work too.
+  useEffect(() => {
+    if (step !== 'pin') return
+    function onKey(e: KeyboardEvent) {
+      if (e.key >= '0' && e.key <= '9') pushDigit(e.key)
+      else if (e.key === 'Backspace') popDigit()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   async function pickIdentity(id: UserIdentity) {
     setIdentity(id)
@@ -138,26 +216,32 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         </div>
 
         {step === 'pin' && (
-          <form onSubmit={handlePin} className="bg-white rounded-2xl p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Enter app password</h2>
-            <input
-              type="password"
-              value={pin}
-              onChange={(e) => { setPin(e.target.value); setError('') }}
-              placeholder="Password"
-              autoComplete="current-password"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-[#2f6b4f] mb-3"
-            />
-            {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
-            <button
-              type="submit"
-              disabled={loading || !pin}
-              className="w-full bg-[#2f6b4f] text-white py-3 rounded-xl font-semibold text-base disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              Continue
-            </button>
-          </form>
+          <div className="bg-white rounded-2xl p-6 shadow-xl">
+            <h2 className="text-lg font-semibold text-gray-800 text-center mb-5">Enter app PIN</h2>
+
+            <div className="flex items-center justify-center gap-4 h-6" aria-live="polite">
+              {loading ? (
+                <Loader2 className="w-6 h-6 animate-spin text-[#2f6b4f]" />
+              ) : (
+                Array.from({ length: PIN_LENGTH }, (_, i) => (
+                  <span
+                    key={i}
+                    className={`w-3.5 h-3.5 rounded-full transition-colors ${
+                      i < pin.length ? 'bg-[#2f6b4f]' : 'bg-gray-200'
+                    }`}
+                  />
+                ))
+              )}
+            </div>
+
+            <p className={`text-red-500 text-sm text-center h-5 mt-3 ${error ? '' : 'invisible'}`}>
+              {error || ' '}
+            </p>
+
+            <div className="mt-3">
+              <Keypad onDigit={pushDigit} onDelete={popDigit} disabled={loading} />
+            </div>
+          </div>
         )}
 
         {step === 'identity' && (

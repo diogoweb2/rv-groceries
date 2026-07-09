@@ -83,8 +83,11 @@ VITE_FIREBASE_APP_ID=1:123456789:web:abcdef
 VITE_APP_EMAIL=rv-app@yourdomain.com
 VITE_APP_PASSWORD=your-firebase-auth-password
 
-# The PIN users enter on the app (choose 4-8 digits or a word)
-VITE_APP_PIN=camping123
+# The PIN users enter on the app. The sign-in screen is a numeric keypad, so this
+# must be exactly 4 digits (to change the length, edit PIN_LENGTH in src/auth/AuthGate.tsx).
+# In production the real value lives in the APP_PIN function secret, not here:
+#   firebase functions:secrets:set APP_PIN
+VITE_APP_PIN=1234
 
 # The VAPID key from Step 5
 VITE_FIREBASE_VAPID_KEY=BNxxxxxxxx...
