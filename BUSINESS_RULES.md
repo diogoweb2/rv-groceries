@@ -639,6 +639,13 @@ stop its destination qualifies it for. The flag is independent of the persist pi
 item that's removed after completion still recurs on the next trip** (§12), and it never
 propagates to Supermarket (it's trip-management, not "bought").
 
+**Batch flagging.** The trip's "⋮" menu offers **"Remove after completion"**, opening a
+full-screen sheet listing every item of every non-hidden checklist, grouped by checklist.
+Already-flagged items are shown highlighted, so the sheet doubles as the overview of what
+is currently flagged. Tapping an item toggles its flag locally; **Save** writes only the
+items whose flag changed and closes the sheet, and closing without saving discards the
+edits. The flag written is the same `removeOnComplete` described above.
+
 **Remove item.** The same "⋮" menu offers **"Remove item"**, which deletes the item from the
 checklist after a confirmation. If the item is live-linked to a Supermarket item, that copy is
 deleted too (§8/§15), and a pinned item is dropped from the recurring set (§12). Checked items

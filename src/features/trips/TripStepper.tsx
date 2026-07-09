@@ -59,10 +59,7 @@ export function TripStepper({ trip, procedures, onFinished }: {
   return (
     <>
       <div className="flex items-center gap-1.5">
-        <span className="flex items-center gap-1 text-xs font-semibold text-[#2f6b4f] bg-emerald-50 border border-[#2f6b4f]/15 rounded-full pl-2 pr-2.5 py-1">
-          <StopIcon className="w-3.5 h-3.5 shrink-0" />
-          {TRIP_STOPS[stop]}
-        </span>
+        <StopIcon className="w-4 h-4 shrink-0 text-[#2f6b4f]" aria-label={`Current stop: ${TRIP_STOPS[stop]}`} />
         <button
           onClick={() => setOpen(true)}
           className="flex items-center gap-1 text-xs font-semibold text-[#2f6b4f] rounded-full px-1.5 py-1 hover:underline active:opacity-70"

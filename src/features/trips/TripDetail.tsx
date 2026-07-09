@@ -9,11 +9,12 @@ import { ChecklistCard } from './ChecklistCard'
 import { AddItemSheet } from './AddItemSheet'
 import { TripStepper } from './TripStepper'
 import { StageView } from './StageView'
+import { RemoveOnCompleteSheet } from './RemoveOnCompleteSheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog } from '@/components/ui/dialog'
-import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, Plus, Check, Tag, GripVertical, Pencil, MapPin, Star, Eye, Backpack, Truck, PackageOpen, ShoppingCart, Printer, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, CircleCheck, Plus, Check, Tag, GripVertical, Pencil, MapPin, Star, Eye, Backpack, Truck, PackageOpen, ShoppingCart, Printer, type LucideIcon } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -165,6 +166,7 @@ export function TripDetail() {
   const [ratingOpen, setRatingOpen] = useState(false)
   const [pendingRating, setPendingRating] = useState(0)
   const [showHidden, setShowHidden] = useState(false)
+  const [batchRemoveOpen, setBatchRemoveOpen] = useState(false)
   const [pickingList, setPickingList] = useState(false)
   const procedures = useProcedures()
 
@@ -361,6 +363,9 @@ export function TripDetail() {
                   <button onClick={() => { setMenuOpen(false); setEditAmenities(trip.amenities) }} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
                     <Tag className="w-4 h-4" /> Edit amenities
                   </button>
+                  <button onClick={() => { setMenuOpen(false); setBatchRemoveOpen(true) }} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                    <CircleCheck className="w-4 h-4" /> Remove after completion
+                  </button>
                   <button onClick={handlePrintAll} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
                     <Printer className="w-4 h-4" /> Print all lists
                   </button>
@@ -505,6 +510,15 @@ export function TripDetail() {
           tripId={id!}
           checklist={checklists.find(c => c.id === addingTo)!}
           onClose={() => setAddingTo(null)}
+        />
+      )}
+
+      {/* Batch "remove after completion" flagging (§20) */}
+      {batchRemoveOpen && (
+        <RemoveOnCompleteSheet
+          tripId={id!}
+          identity={identity}
+          onClose={() => setBatchRemoveOpen(false)}
         />
       )}
 
