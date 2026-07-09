@@ -441,12 +441,15 @@ supermarket.
   list (below all other items); un-checking it leaves it in place rather than moving it back.
 - **Quantity stepper.** Every item is created with quantity 1 and can be adjusted anytime with a
   `+`/`-` stepper on its row (no upper cap, minimum 1).
-- **Swipe-right to delete.** Supermarket rows have no trash button, but swiping a row to the
-  right past a threshold deletes it (revealing a red delete affordance as it slides). The
-  horizontal swipe is tracked independently from the vertical drag-reorder handle so the two
-  don't conflict. The row's tap actions remain the bought check, the `+`/`-` stepper, and a
-  tent (camping) toggle, kept large for easy tapping. Deleting a live-linked camping item also
-  removes its trip grocery copy (§8); deleting from the trip side still propagates here too.
+- **Swipe-right to delete.** Swiping a row to the right past a threshold deletes it immediately,
+  with no confirmation (revealing a red delete affordance as it slides). The horizontal swipe is
+  tracked independently from the vertical drag-reorder handle so the two don't conflict.
+- **"Remove item" menu action.** Each row also has a "⋮" overflow menu whose **Remove item**
+  action deletes the row after a **confirmation** (the swipe gesture is self-evident; a menu tap
+  is not). The row's other tap actions are the bought check, the `+`/`-` stepper, and a tent
+  (camping) toggle, kept large for easy tapping. However it's deleted, removing a live-linked
+  camping item also removes its trip grocery copy (§8); deleting from the trip side still
+  propagates here too.
 
 ## 16. Supermarket auto-sort (learned ordering)
 
@@ -629,8 +632,13 @@ still shows at the stop where it was checked, so the check can be undone; unchec
 brings it back to the following stops. When it is **off**, the item keeps appearing at every
 stop its destination qualifies it for. The flag is independent of the persist pin: **a pinned
 item that's removed after completion still recurs on the next trip** (§12), and it never
-propagates to Supermarket (it's trip-management, not "bought"). There is **no per-item delete**
-in the card — checked items are removed from view via the card's "Hide completed" toggle (§5).
+propagates to Supermarket (it's trip-management, not "bought").
+
+**Remove item.** The same "⋮" menu offers **"Remove item"**, which deletes the item from the
+checklist after a confirmation. If the item is live-linked to a Supermarket item, that copy is
+deleted too (§8/§15), and a pinned item is dropped from the recurring set (§12). Checked items
+that should merely be hidden rather than deleted are handled by the card's "Hide completed"
+toggle (§5).
 
 **Per-stop, independent completion.** Each item is checked **independently at each stop**
 (`stagesDone` = the stop indices it's been handled at). Checking it at one stop does not

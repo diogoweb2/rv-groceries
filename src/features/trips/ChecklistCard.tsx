@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useChecklistItems, useStores } from '@/hooks/useFirestore'
 import {
-  updateChecklist, deleteChecklist, setItemPersist, setItemDestination, itemDestination, setItemRemoveOnComplete,
+  updateChecklist, deleteChecklist, deleteChecklistItemAndPropagate,
+  setItemPersist, setItemDestination, itemDestination, setItemRemoveOnComplete,
   savePinnedChecklist, removePinnedChecklist,
   pushPinnedChecklistToTrips,
   setChecklistItemChecked, updateChecklistItemAndPropagate,
@@ -116,6 +117,11 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
 
   async function handleToggleRemoveOnComplete(item: ChecklistItem) {
     await setItemRemoveOnComplete(tripId, checklist.id, item, !item.removeOnComplete, identity)
+  }
+
+  async function handleDeleteItem(item: ChecklistItem) {
+    if (!confirm(`Remove "${item.name}" from this checklist?`)) return
+    await deleteChecklistItemAndPropagate(tripId, checklist, item)
   }
 
   async function handleChangeQty(item: ChecklistItem, delta: number) {
@@ -357,6 +363,13 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
                         <CircleCheck className="w-4 h-4 shrink-0" />
                         <span className="flex-1 text-left">Remove after completion</span>
                         {item.removeOnComplete && <Check className="w-4 h-4 shrink-0" />}
+                      </button>
+                      <button
+                        onClick={() => { setItemMenu(null); handleDeleteItem(item) }}
+                        className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-gray-50"
+                      >
+                        <Trash2 className="w-4 h-4 shrink-0" />
+                        <span className="flex-1 text-left">Remove item</span>
                       </button>
                     </div>
                   </>

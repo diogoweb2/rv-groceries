@@ -27,7 +27,7 @@ import {
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ArrowLeft, CheckCheck, Plus, Minus, GripVertical, Trash2 } from 'lucide-react'
+import { ArrowLeft, CheckCheck, Plus, Minus, GripVertical, Trash2, MoreVertical } from 'lucide-react'
 import { RvIcon } from '@/components/RvIcon'
 import type { SupermarketItem } from '@/types'
 
@@ -40,14 +40,17 @@ function SortableItem({
   onToggleCamping,
   onChangeQty,
   onDelete,
+  onRemove,
 }: {
   item: SupermarketItem
   onToggle: (item: SupermarketItem) => void
   onToggleCamping: (item: SupermarketItem) => void
   onChangeQty: (item: SupermarketItem, delta: number) => void
   onDelete: (item: SupermarketItem) => void
+  onRemove: (item: SupermarketItem) => void
 }) {
   const qtyNum = Math.max(1, Number(item.qty) || 1)
+  const [menuOpen, setMenuOpen] = useState(false)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
 
   // Horizontal swipe-to-delete. Tracked separately from the vertical drag
@@ -175,6 +178,31 @@ function SortableItem({
       >
         <RvIcon className="w-7 h-7" active={!!item.forCamping} />
       </button>
+
+      {/* Item overflow menu */}
+      <div className="relative shrink-0">
+        <button
+          onClick={() => setMenuOpen(v => !v)}
+          aria-label="Item actions"
+          className="p-2.5 -m-1 text-gray-300 hover:text-gray-500"
+        >
+          <MoreVertical className="w-5 h-5" />
+        </button>
+        {menuOpen && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+            <div className="absolute right-0 top-full z-20 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-44">
+              <button
+                onClick={() => { setMenuOpen(false); onRemove(item) }}
+                className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-gray-50"
+              >
+                <Trash2 className="w-4 h-4 shrink-0" />
+                <span className="flex-1 text-left">Remove item</span>
+              </button>
+            </div>
+          </>
+        )}
+      </div>
       </div>
     </div>
   )
@@ -334,6 +362,13 @@ export function SupermarketDetail() {
     await deleteSupermarketItemAndPropagate(item)
   }
 
+  // Same deletion from the row's "⋮" menu, where there's no swipe gesture to
+  // make the intent obvious — so confirm first.
+  async function handleRemove(item: SupermarketItem) {
+    if (!confirm(`Remove "${item.name}" from this list?`)) return
+    await handleDelete(item)
+  }
+
   async function handleComplete() {
     if (!list) return
     const missed = items.filter(i => !i.checked).length
@@ -436,6 +471,7 @@ export function SupermarketDetail() {
                 onToggleCamping={toggleCamping}
                 onChangeQty={changeQty}
                 onDelete={handleDelete}
+                onRemove={handleRemove}
               />
             ))}
           </SortableContext>
