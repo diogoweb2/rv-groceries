@@ -159,9 +159,30 @@ interface DigestEntry {
 }
 
 /**
+ * The store's display name: the live `stores` record first, then the copy
+ * denormalized onto the list (§15).
+ * @param {FirebaseFirestore.Firestore} db firestore handle
+ * @param {FirebaseFirestore.DocumentSnapshot} list the supermarket list
+ * @return {Promise<string>} the store name, or "the list" if unresolvable
+ */
+async function storeNameFor(
+  db: FirebaseFirestore.Firestore,
+  list: FirebaseFirestore.DocumentSnapshot,
+): Promise<string> {
+  const {storeId, storeName} = list.data() ?? {};
+  if (typeof storeId === "string") {
+    const store = await db.collection("stores").doc(storeId).get();
+    const live = store.data()?.name as string | undefined;
+    if (live) return live;
+  }
+  return (storeName as string | undefined) ?? "the list";
+}
+
+/**
  * Daily digest of items added to Supermarket lists, at 18:00 Toronto (§15).
- * One push per person summarising every store touched since the previous run,
- * rather than a push per item added. Silent on days with no new items.
+ * One push per person titled with the stores touched since the previous run,
+ * whose body totals the additions across them — never a push per item added.
+ * Silent on days with no new items.
  *
  * "New" means `createdAt` after the last run, so items written before this
  * feature shipped (no `createdAt`) are never reported.
@@ -195,7 +216,7 @@ export const dailySupermarketDigest = onSchedule(
 
       touched.push({
         listId: list.id,
-        store: (list.data().storeName as string | undefined) ?? "the list",
+        store: await storeNameFor(db, list),
         added,
         total: items.size,
       });
@@ -210,23 +231,25 @@ export const dailySupermarketDigest = onSchedule(
       return;
     }
 
+    // The stores name the notification; the counts are summed across them, so
+    // "total" is every touched list's size added together.
     const one = touched.length === 1 ? touched[0] : undefined;
-    const body = one ?
-      `${plural(one.added)} added to ${one.store} (${one.total} in total)` :
-      touched
-        .map((t) =>
-          `${plural(t.added)} added - ${t.store} (${t.total} in total)`)
-        .join("\n");
+    const title = touched.map((t) => t.store).join(" + ");
+    const added = touched.reduce((n, t) => n + t.added, 0);
+    const total = touched.reduce((n, t) => n + t.total, 0);
+    const body = `${plural(added)} added (total: ${total})`;
     // Tapping the push opens the one store's list, or the tab when several.
     const url = one ? `/supermarket/${one.listId}` : "/supermarket";
-    logger.info(`Supermarket digest: ${touched.length} store(s)`, {body});
+    logger.info(`Supermarket digest: ${touched.length} store(s)`, {
+      title, body,
+    });
 
     await Promise.all(
       IDENTITIES.map((to) =>
         db.collection("notifications").add({
           to,
           from: "system",
-          title: "Supermarket",
+          title,
           body,
           type: "supermarket",
           url,

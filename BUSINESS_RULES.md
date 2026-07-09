@@ -429,10 +429,13 @@ supermarket.
   Function (`dailySupermarketDigest`) sends **both** people one notification summarising the
   items added to active Supermarket lists since the previous run — never one push per item.
   - **Silent when nothing was added.** No new items since the last run ⇒ no notification.
-  - One line per store touched, with that store's new count and its current total:
-    - Single store: *"1 new item added to Costco (5 in total)"*.
-    - Several stores, one line each: *"1 new item added - Costco (5 in total)"* /
-      *"1 new item added - NoFrills/FreshCo (6 in total)"*.
+  - The **title** names the stores touched, joined with `+`; the **body** sums the additions
+    and list sizes **across all of them**:
+    - One store: title *"NoFrills/FreshCo"*, body *"1 new item added (total: 4)"*.
+    - Two stores: title *"NoFrills/FreshCo + Costco"*, body *"2 new items added (total: 7)"* —
+      2 added between them, 7 items across both lists.
+  - The store name comes from the live `stores` record, falling back to the name denormalized
+    on the list (same preference as list display, §15).
   - **Tapping it** opens that store's list when only one store was touched, otherwise the
     Supermarket tab.
   - "New" is judged by the item's `createdAt` against the last run's timestamp, so items that
