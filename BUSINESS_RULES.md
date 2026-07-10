@@ -227,19 +227,23 @@ The `itemCatalog` collection is the **single global source** for item autocomple
     into the Bring-to-Truck list (taking destination **Truck** if they had none), any live
     Supermarket link is re-pointed at the moved copy, and the emptied grocery checklists are
     deleted.
-- **Supermarket → Trip (one direction).** A Supermarket item enters the trip only when it is
-  flagged **for camping** (the tent icon / `-> camping` shorthand, §15). Flagging mirrors it
-  into the next/active trip's Bring-to-Truck list (§4's selection rule: active trip, else
-  soonest upcoming non-cancelled/non-completed trip) with the **Truck** final destination (§18)
-  — camping groceries ride in the truck to camp — adopting a same-name item there instead of
-  duplicating, and leaving that item's destination alone if it already had one. No-op if there
-  is no eligible trip. **Un-flagging** removes the mirrored copy from the trip; the Supermarket
-  item itself stays.
+- **Supermarket → Trip (one direction), and only once bought.** A Supermarket item enters the
+  trip only when it is **both** flagged **for camping** (the tent icon / `-> camping`
+  shorthand, §15) **and checked off as bought**. Flagging an unbought item merely records the
+  intent — there is nothing to load into the truck until it has been purchased.
+  - Whichever of the two happens second mirrors the item into the next/active trip's
+    Bring-to-Truck list (§4's selection rule: active trip, else soonest upcoming
+    non-cancelled/non-completed trip) with the **Truck** final destination (§18) — camping
+    groceries ride in the truck to camp — adopting a same-name item there instead of
+    duplicating, and leaving that item's destination alone if it already had one. No-op if
+    there is no eligible trip.
+  - **Un-buying** it removes the mirrored copy from the trip and keeps the camping flag on.
+    **Un-flagging** removes the copy and clears the flag. Either way the Supermarket item stays.
   - **Sticky to its trip.** A link is fixed to whichever trip was next/active when it was
     created — it does not retarget if a different trip later becomes next/active.
-- **The two checks are independent.** Checking in Supermarket means **bought**; checking in the
-  trip means **handled at this stop** (loaded into the truck, §20). Neither propagates to the
-  other.
+- **The two checks mean different things.** Checking in Supermarket means **bought** — it is
+  what admits the item to the trip. Checking in the trip means **handled at this stop** (loaded
+  into the truck, §20) and never propagates back to Supermarket.
 - **What a link does propagate:** **quantity** changes and **deletion**, either way. Deleting a
   whole checklist or trip does **not** cascade to Supermarket.
 - **Quantity.** A mirrored item keeps a `+`/`-` quantity stepper on its trip row (min 1),
@@ -424,14 +428,14 @@ supermarket.
   flagged **for camping**, either by a per-item tent toggle or by the shorthand
   **`<name> -> camping`** (also `→ camping`) when adding — the suffix is stripped and the item
   is flagged.
-  - Flagging an item **mirrors it** into the next/active trip's **Bring to Truck** (`other`)
-    list with the **Truck** final destination (§18), unless a same-name trip item it adopts
-    already has a destination set, which is left untouched. The trip copy starts **unchecked** —
-    bought at the store and loaded into the truck are different acts. No-op if there's no
-    eligible trip. Un-flagging removes the mirrored copy from the trip but leaves the item in
-    Supermarket.
-  - Once mirrored, quantity changes and deletion on either side apply to both; the bought check
-    and the trip's per-stop check stay independent (§8).
+  - A flagged item **is mirrored** into the next/active trip's **Bring to Truck** (`other`)
+    list — with the **Truck** final destination (§18), unless a same-name trip item it adopts
+    already has one — **only once it is also checked off as bought** (§8). The trip copy starts
+    **unchecked**: bought at the store and loaded into the truck are different acts. No-op if
+    there's no eligible trip. Un-buying or un-flagging removes the mirrored copy from the trip
+    but leaves the item in Supermarket.
+  - Once mirrored, quantity changes and deletion on either side apply to both; the trip's
+    per-stop check never propagates back (§8).
 - **Autocomplete.** Adding an item suggests **supermarket items only** — catalog entries of
   category `grocery` or `general` (never `camping`) — ranked by grocery usage. New custom names
   are registered to the catalog as `grocery`.

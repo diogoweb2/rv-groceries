@@ -1763,17 +1763,41 @@ export async function deleteSupermarketItemAndPropagate(item: SupermarketItem) {
   await deleteSupermarketItem(item.listId, item.id)
 }
 
-// Mark a supermarket item bought/unbought. Deliberately *not* propagated to a
-// live-linked trip item: bought at the store and loaded into the truck are two
-// different acts, each with its own check (§8).
+// Mark a supermarket item bought/unbought. A camping-flagged item enters the
+// trip's "Bring to Truck" list the moment it is bought, and leaves it again if
+// it is un-bought (§8) — there's no point loading something not yet purchased.
+// The trip copy's own check (loaded into the truck) is never touched here.
 export async function setSupermarketItemChecked(
   list: SupermarketList,
   item: SupermarketItem,
   checked: boolean,
   identity: UserIdentity,
+  trips: Trip[],
   extra?: Partial<SupermarketItem>,
 ) {
   await updateSupermarketItem(list.id, item.id, { checked, ...extra }, identity, item.rev)
+  if (!item.forCamping) return
+  if (checked) await linkSupermarketItemToTrip(list, { ...item, checked }, trips, identity)
+  else await unlinkSupermarketItemFromTrip({ ...item, checked }, identity, true)
+}
+
+// Flip a supermarket item's "for camping" flag. The trip copy only exists while
+// the item is both flagged and bought (§8), so flagging an unbought item just
+// records the intent.
+export async function setSupermarketItemForCamping(
+  list: SupermarketList,
+  item: SupermarketItem,
+  forCamping: boolean,
+  trips: Trip[],
+  identity: UserIdentity,
+) {
+  if (!forCamping) {
+    await unlinkSupermarketItemFromTrip(item, identity)
+  } else if (item.checked) {
+    await linkSupermarketItemToTrip(list, item, trips, identity)
+  } else {
+    await updateSupermarketItem(list.id, item.id, { forCamping: true }, identity, item.rev)
+  }
 }
 
 // Adjust a supermarket item's quantity and, when it's live-linked to a trip
@@ -1796,11 +1820,11 @@ export async function setSupermarketItemQty(
   )
 }
 
-// Flip a supermarket item's camping flag on: mirror it into the next/active
-// trip's "Bring to Truck" (Other) list with the Truck destination, adopting a
-// same-name item there if one already exists. No-op if there's no next/active
-// trip. The trip copy starts unchecked — buying it in Supermarket is not the
-// same as loading it into the truck (§8).
+// Mirror a bought, camping-flagged supermarket item into the next/active trip's
+// "Bring to Truck" (Other) list with the Truck destination, adopting a same-name
+// item there if one already exists. No-op if there's no next/active trip. The
+// trip copy starts unchecked — bought at the store is not loaded into the truck
+// (§8). Only ever called once the item is *both* flagged and bought.
 export async function linkSupermarketItemToTrip(
   list: SupermarketList,
   item: SupermarketItem,
@@ -1857,21 +1881,31 @@ export async function linkSupermarketItemToTrip(
   )
 }
 
-// Flip a supermarket item's camping flag off: remove its mirrored copy from
-// the trip's "Bring to Truck" list and clear the link.
-export async function unlinkSupermarketItemFromTrip(item: SupermarketItem, identity: UserIdentity) {
+// Remove a supermarket item's mirrored copy from the trip's "Bring to Truck"
+// list and clear the link. `keepFlag` keeps the camping flag on — used when the
+// item is un-bought but still destined for camping (§8).
+export async function unlinkSupermarketItemFromTrip(
+  item: SupermarketItem,
+  identity: UserIdentity,
+  keepFlag = false,
+) {
   if (item.linkedTripId && item.linkedChecklistId && item.linkedItemId) {
     await deleteDoc(doc(db, 'trips', item.linkedTripId, 'checklists', item.linkedChecklistId, 'items', item.linkedItemId))
   }
-  await updateDoc(doc(db, 'supermarketLists', item.listId, 'items', item.id), {
-    forCamping: false,
+  // Re-read the rev — the caller may have just written this doc (e.g. the bought
+  // toggle), leaving its local copy a revision behind.
+  const ref = doc(db, 'supermarketLists', item.listId, 'items', item.id)
+  const snap = await getDoc(ref)
+  const rev = (snap.data()?.rev as number) ?? item.rev
+  await updateDoc(ref, {
+    forCamping: keepFlag,
     linkedTripId: deleteField(),
     linkedChecklistId: deleteField(),
     linkedItemId: deleteField(),
     updatedBy: identity,
     updatedAt: new Date().toISOString(),
-    baseRev: item.rev,
-    rev: item.rev + 1,
+    baseRev: rev,
+    rev: rev + 1,
   })
 }
 

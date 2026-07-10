@@ -20,7 +20,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { useSupermarketLists, useSupermarketItems, useCatalog, useTrips, useSupermarketSort, useStores } from '@/hooks/useFirestore'
 import {
   addSupermarketItem, updateSupermarketItem,
-  setSupermarketItemChecked, setSupermarketItemQty, linkSupermarketItemToTrip, unlinkSupermarketItemFromTrip,
+  setSupermarketItemChecked, setSupermarketItemQty, setSupermarketItemForCamping,
   completeSupermarketList, ensureCatalogItem, deleteSupermarketItemAndPropagate,
   parseCampingFlag, storeLabel, sortedByMemory, learnSupermarketOrder,
 } from '@/lib/firestore'
@@ -285,9 +285,9 @@ export function SupermarketDetail() {
       rev: 1, baseRev: 0, updatedBy: identity, updatedAt: new Date().toISOString(),
     }
     await applySortedOrder([...items, newItem])
-    // "<name> -> camping" shorthand: mirror straight into the next/active
-    // trip's "Bring to Truck" list (§15).
-    if (forCamping) await linkSupermarketItemToTrip(list, newItem, trips, identity)
+    // "<name> -> camping" shorthand: flag it now; it reaches the trip's
+    // "Bring to Truck" list once bought (§15).
+    if (forCamping) await setSupermarketItemForCamping(list, newItem, true, trips, identity)
   }
 
   // Adjust an item's quantity from its row stepper (min 1). Optimistic locally.
@@ -330,27 +330,21 @@ export function SupermarketDetail() {
         if (it.id === item.id || it.order === i) continue
         await updateSupermarketItem(list!.id, it.id, { order: i }, identity, it.rev)
       }
-      // Propagates to the linked trip item (if any), which cascades the
-      // checked → copy-to-RV rule (§8).
-      await setSupermarketItemChecked(list!, item, true, identity, { order: reordered.length - 1 })
+      // A camping-flagged item joins the trip's Bring to Truck list here (§8).
+      await setSupermarketItemChecked(list!, item, true, identity, trips, { order: reordered.length - 1 })
     } else {
       setItems(items.map(i => (i.id === item.id ? { ...i, checked: false } : i)))
-      await setSupermarketItemChecked(list!, item, false, identity)
+      await setSupermarketItemChecked(list!, item, false, identity, trips)
     }
   }
 
-  // Tent icon: mirror this item into (or remove it from) the next/active
-  // trip's "Bring to Truck" list — the item stays live-linked afterward (§8/§15).
+  // Tent icon: mark the item as destined for camping. It only reaches the trip's
+  // "Bring to Truck" list once it's also bought (§8/§15).
   async function toggleCamping(item: SupermarketItem) {
     // Reflect the pin locally right away — the Firestore link/unlink round-trip
     // is slow, so waiting for the subscription made the toggle feel ~3s laggy.
-    if (item.forCamping) {
-      setItems(items.map(i => (i.id === item.id ? { ...i, forCamping: false } : i)))
-      await unlinkSupermarketItemFromTrip(item, identity)
-    } else {
-      setItems(items.map(i => (i.id === item.id ? { ...i, forCamping: true } : i)))
-      await linkSupermarketItemToTrip(list!, item, trips, identity)
-    }
+    setItems(items.map(i => (i.id === item.id ? { ...i, forCamping: !item.forCamping } : i)))
+    await setSupermarketItemForCamping(list!, item, !item.forCamping, trips, identity)
   }
 
   // Removes the item and, if it's live-linked to a trip item, that copy
