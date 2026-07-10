@@ -227,7 +227,6 @@ export function SupermarketDetail() {
   useEffect(() => { setItems(rawItems) }, [rawItems])
 
   const list = lists.find(l => l.id === id)
-  const store = stores.find(s => s.id === list?.storeId)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -287,8 +286,8 @@ export function SupermarketDetail() {
     }
     await applySortedOrder([...items, newItem])
     // "<name> -> camping" shorthand: mirror straight into the next/active
-    // trip's grocery list for this store (§15).
-    if (forCamping && store) await linkSupermarketItemToTrip(list, newItem, store, trips, identity)
+    // trip's "Bring to Truck" list (§15).
+    if (forCamping) await linkSupermarketItemToTrip(list, newItem, trips, identity)
   }
 
   // Adjust an item's quantity from its row stepper (min 1). Optimistic locally.
@@ -341,21 +340,20 @@ export function SupermarketDetail() {
   }
 
   // Tent icon: mirror this item into (or remove it from) the next/active
-  // trip's grocery list for this store — the item stays live-linked
-  // afterward (§8/§15).
+  // trip's "Bring to Truck" list — the item stays live-linked afterward (§8/§15).
   async function toggleCamping(item: SupermarketItem) {
     // Reflect the pin locally right away — the Firestore link/unlink round-trip
     // is slow, so waiting for the subscription made the toggle feel ~3s laggy.
     if (item.forCamping) {
       setItems(items.map(i => (i.id === item.id ? { ...i, forCamping: false } : i)))
       await unlinkSupermarketItemFromTrip(item, identity)
-    } else if (store) {
+    } else {
       setItems(items.map(i => (i.id === item.id ? { ...i, forCamping: true } : i)))
-      await linkSupermarketItemToTrip(list!, item, store, trips, identity)
+      await linkSupermarketItemToTrip(list!, item, trips, identity)
     }
   }
 
-  // Removes the item and, if it's live-linked to a trip grocery item, that copy
+  // Removes the item and, if it's live-linked to a trip item, that copy
   // too (§8/§15). Reached by swipe-right or the row's "⋮" menu.
   async function handleDelete(item: SupermarketItem) {
     setItems(items.filter(i => i.id !== item.id))

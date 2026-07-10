@@ -5,7 +5,8 @@ source of truth for *behavior* — not code structure. Keep it updated when rule
 
 App: an offline-first PWA for two users (Diogo & Alice) to plan camping/RV trips and
 manage packing checklists. A standalone **Supermarket** feature (see §15) lets Alice build
-per-store shopping lists for Diogo; grocery handling also lives inside camping trips (§8).
+per-store shopping lists for Diogo; items flagged for camping there flow into the trip's
+**Bring to Truck** list (§8). Trips themselves have no grocery section.
 
 ---
 
@@ -156,7 +157,7 @@ The Home screen focuses on a single trip, chosen in this priority:
   - **Auto-hide on completion.** The moment a checklist becomes **100% complete** (its last
     item is checked), it is hidden for this trip automatically, with no confirmation; it can be
     unhidden from the "Show hidden" toggle. A list that is already complete when the trip is
-    opened is left visible. **Store-linked grocery checklists are exempt** — their items are managed from the Supermarket
+    opened is left visible. (Historically store-linked grocery checklists were exempt; they no longer exist.) The Supermarket
     side and being "all bought" is their normal state, so auto-hiding them would swallow items
     the user expects to see mirrored into the trip (§8). They can still be hidden manually.
 - **Completed items sort to the bottom.** Inside an expanded checklist card, checked (completed)
@@ -217,54 +218,32 @@ The `itemCatalog` collection is the **single global source** for item autocomple
   date-driven auto-completion does not double-count. These stats drive the suggestion ranking
   and scoring in §6.
 
-## 8. Groceries inside a Trip (store-linked, synced with Supermarket, auto-move to RV)
+## 8. Groceries reach a Trip only from Supermarket
 
-- A trip's **Groceries** (`grocery` phase) checklist represents shopping for the trip. Each
-  grocery checklist is for **exactly one Store** (see §11) — picked from a store list, not
-  typed as free text. The checklist's name mirrors the store's name at the time it's created
-  or changed.
-  - **Automatic.** Grocery checklists are never created by hand — there is no "Add store list"
-    action. Opening a trip provisions one grocery checklist per Store (§11) that doesn't already
-    have one, appended below the Other list. A store added later shows up on every trip the next
-    time that trip is opened.
-  - **Change store.** The checklist menu's "Change store" (grocery checklists only, replacing
-    "Rename") re-links the checklist to a different store, updating its name to match.
-  - **Quantity.** Every grocery item has a `+`/`-` quantity stepper on its row (min 1), matching
-    the Supermarket stepper (§15).
-- **Sync with Supermarket (live-linked pair).** A store-linked grocery checklist only syncs
-  while its trip is the **next/active trip** (§4's selection rule: active trip, else soonest
-  upcoming non-cancelled/non-completed trip) — checklists on other trips behave as plain lists.
-  - **Trip → Supermarket.** Adding an item to a synced grocery checklist mirrors it into that
-    store's active Supermarket list (creating the list if none is active), adopting a
-    same-name item there instead of duplicating.
-  - **Supermarket → Trip.** A Supermarket item only appears in the trip's grocery checklist
-    once flagged **for camping** (the tent icon / `-> camping` shorthand, §15). Flagging it
-    mirrors it into the synced trip's checklist for that store (creating the checklist if
-    needed); un-flagging removes the mirrored copy from the trip (the Supermarket item itself
-    stays).
-  - **Once linked**, the two items are the same shopping-list entry: checking/unchecking,
-    quantity changes, and deletion on either side apply to both. (Un-flagging in Supermarket is
-    the one "soft" unlink — it removes the trip copy but keeps the Supermarket item.)
-  - **Sticky to its trip.** A link is fixed to whichever trip was next/active at the moment it
-    was created — it does not retarget if a different trip later becomes next/active.
-  - Deleting a whole checklist or trip does **not** cascade to Supermarket (only per-item
-    add/check/qty/delete actions propagate); any linked Supermarket items are left as-is.
-- **Checked → copy to RV** *(retired by §20 — the "Spmkt->Truck" list no longer exists; bought
-  groceries simply appear in the stage views by their destination. The rule below is history.)*
-  When a grocery item is **checked** (bought) — whether directly in
-  the trip, or via its linked Supermarket item — it is automatically **copied** into the trip's
-  **Day of departure** (`pre_dayof`) checklist — the "bring to RV" list.
-  - The target is a dedicated **"Spmkt->Truck"** checklist in the `pre_dayof` phase, **created
-    automatically** if the trip doesn't have one yet (so grocery copies stay separate from any
-    hand-made day-of packing list). Every bought grocery item — added directly in the trip or
-    synced from Supermarket — lands here.
-  - **Migration.** Items previously copied into a trip's first `pre_dayof` checklist (the old
-    behaviour) are relocated into "Spmkt->Truck" on load: any `pre_dayof` item whose name matches
-    an item in one of the trip's grocery checklists is treated as a grocery copy and moved.
-  - The copy is skipped if an item with the same name already exists in the target (idempotent;
-    re-checking does not create duplicates).
-  - It is a **copy, not a move**: the item stays (checked) in Groceries and appears (unchecked)
-    in the RV list. Un-checking the grocery item does **not** remove it from the RV list.
+- **Trips have no Groceries section.** A trip has exactly one list — **"Bring to Truck"**
+  (`other` phase). Groceries are never added on the trip screen; they are built in the
+  standalone **Supermarket** feature (§15), per store.
+  - **Migration.** On load, each trip's `grocery` checklists are collapsed: their items move
+    into the Bring-to-Truck list (taking destination **Truck** if they had none), any live
+    Supermarket link is re-pointed at the moved copy, and the emptied grocery checklists are
+    deleted.
+- **Supermarket → Trip (one direction).** A Supermarket item enters the trip only when it is
+  flagged **for camping** (the tent icon / `-> camping` shorthand, §15). Flagging mirrors it
+  into the next/active trip's Bring-to-Truck list (§4's selection rule: active trip, else
+  soonest upcoming non-cancelled/non-completed trip) with the **Truck** final destination (§18)
+  — camping groceries ride in the truck to camp — adopting a same-name item there instead of
+  duplicating, and leaving that item's destination alone if it already had one. No-op if there
+  is no eligible trip. **Un-flagging** removes the mirrored copy from the trip; the Supermarket
+  item itself stays.
+  - **Sticky to its trip.** A link is fixed to whichever trip was next/active when it was
+    created — it does not retarget if a different trip later becomes next/active.
+- **The two checks are independent.** Checking in Supermarket means **bought**; checking in the
+  trip means **handled at this stop** (loaded into the truck, §20). Neither propagates to the
+  other.
+- **What a link does propagate:** **quantity** changes and **deletion**, either way. Deleting a
+  whole checklist or trip does **not** cascade to Supermarket.
+- **Quantity.** A mirrored item keeps a `+`/`-` quantity stepper on its trip row (min 1),
+  matching the Supermarket stepper (§15); adjusting it on either side updates both.
 
 ## 9. Legacy generic grocery surface (retained, unused)
 
@@ -301,10 +280,10 @@ The `itemCatalog` collection is the **single global source** for item autocomple
 
 - **Amenities** — named tags with an emoji icon (e.g. Beach, Pool). Used to drive stats.
 - **Stores** — named shops. This is the **single shared list** of stores used everywhere:
-  as an item's default store, as the picker for trip grocery checklists (§8), and as the
+  as an item's default store and as the
   list of stores Supermarket (§15) can have a list for. Seeded on first load with **NoFrills /
   FreshCo**, **Dollarama**, and **Costco**; more can be added, renamed, or removed here, which
-  changes what's available in both Groceries and Supermarket going forward.
+  changes what's available in Supermarket going forward.
 - **Saved items (catalog)** — see §7.
 - **Bugs & ideas** — a sortable log of bug reports and improvement ideas (§17).
 - **Safety checklists** — the shared per-transition safety procedures reused by every trip (§20).
@@ -441,21 +420,18 @@ supermarket.
   - "New" is judged by the item's `createdAt` against the last run's timestamp, so items that
     predate this feature (they have no `createdAt`) are never reported. The run timestamp
     advances even on silent days, so nothing is ever reported twice.
-- **Camping items (live-linked with trip Groceries, §8).** Any item can be flagged **for
-  camping**, either by a per-item tent toggle or by the shorthand **`<name> -> camping`** (also
-  `→ camping`) when adding — the suffix is stripped and the item is flagged.
-  - Flagging an item **mirrors it** into the next/active trip's Groceries checklist for this
-    store (creating that checklist if the trip doesn't have one yet for this store). The
-    mirrored trip item is given the **Truck** final destination (§18) automatically — camping
-    groceries ride in the truck to camp — unless a same-name trip item it adopts already has a
-    destination set, which is left untouched. No-op if there's no eligible trip (active trip,
-    else soonest upcoming non-cancelled/non-completed one). Un-flagging removes the mirrored
-    copy from the trip but leaves the item in Supermarket.
-  - Once mirrored, the Supermarket item and the trip item are the same entry: checking, quantity
-    changes, and deletion on either side apply to both (§8).
-  - Checking a camping-flagged item bought copies it into the trip's **"Spmkt->Truck"**
-    Day of departure (`pre_dayof`) list, via the same rule that fires for any checked trip
-    grocery item (§8) — idempotent, skips a same-name item already there.
+- **Camping items (live-linked with the trip's Bring-to-Truck list, §8).** Any item can be
+  flagged **for camping**, either by a per-item tent toggle or by the shorthand
+  **`<name> -> camping`** (also `→ camping`) when adding — the suffix is stripped and the item
+  is flagged.
+  - Flagging an item **mirrors it** into the next/active trip's **Bring to Truck** (`other`)
+    list with the **Truck** final destination (§18), unless a same-name trip item it adopts
+    already has a destination set, which is left untouched. The trip copy starts **unchecked** —
+    bought at the store and loaded into the truck are different acts. No-op if there's no
+    eligible trip. Un-flagging removes the mirrored copy from the trip but leaves the item in
+    Supermarket.
+  - Once mirrored, quantity changes and deletion on either side apply to both; the bought check
+    and the trip's per-stop check stay independent (§8).
 - **Autocomplete.** Adding an item suggests **supermarket items only** — catalog entries of
   category `grocery` or `general` (never `camping`) — ranked by grocery usage. New custom names
   are registered to the catalog as `grocery`.
@@ -472,7 +448,7 @@ supermarket.
 - **"Remove item" menu action.** Each row also has a "⋮" overflow menu whose **Remove item**
   action deletes the row immediately, with no confirmation. The row's other tap actions are the bought check, the `+`/`-` stepper, and a tent
   (camping) toggle, kept large for easy tapping. However it's deleted, removing a live-linked
-  camping item also removes its trip grocery copy (§8); deleting from the trip side still
+  camping item also removes its trip copy (§8); deleting from the trip side still
   propagates here too.
 
 ## 16. Supermarket auto-sort (learned ordering)
@@ -604,10 +580,9 @@ See `STAGE_FLOW_SPEC.md` for the design rationale.
 
 ### The two-list model
 
-- A trip has only two kinds of lists: **Groceries** (one per store, unchanged) and a single
-  **Other** list for everything else. The old phase sections (Before the trip / Day of
-  departure / Pack down / Groceries) are gone; internally only the `grocery` and `other`
-  checklist phases are used.
+- A trip has exactly one list: **Other**, shown as **"Bring to Truck"**. The old phase
+  sections (Before the trip / Day of departure / Pack down / Groceries) are gone; internally
+  only the `other` checklist phase is used. Groceries arrive here from Supermarket (§8).
 - **Migration.** On load, each trip's legacy `pre_early`/`pre_dayof`/`pack_down` checklists
   (including the retired auto-lists "Spmkt->Truck" and "Bringing back items") are collapsed:
   their items move into the single Other list and the emptied checklists are deleted.
@@ -616,12 +591,9 @@ See `STAGE_FLOW_SPEC.md` for the design rationale.
   step (§18). **"+ Add item"** is the trip's primary action: a full-width button at the top of
   the trip screen that opens the list picker. No list is ever created by hand — the Other list
   and the per-store Groceries lists are both provisioned automatically (§8).
-- **List titles are display-only.** A list's stored `name` never changes (grocery lists key
-  off the store name for Supermarket sync and pinned lists), but everywhere a list title is
-  shown — card header, print output, add-item picker — it is rendered as **"Buy @ <store>"**
-  for grocery lists and **"Bring to Truck"** for the Other list, so it's obvious which lists
-  are shopping and which is loading. The section headers above them read **Groceries** and
-  **Packing**.
+- **List titles are display-only.** A list's stored `name` never changes (pinned lists key off
+  it), but everywhere a list title is shown — card header, print output, add-item picker — the
+  Other list is rendered as **"Bring to Truck"**. Its section header reads **Packing**.
 
 ### The route
 
@@ -638,7 +610,7 @@ at Home).
 
 ### What each stop shows
 
-- **Stop 0 — Home (departure):** the editable **Groceries + Other** lists (add items, set
+- **Stop 0 — Home (departure):** the editable **Bring to Truck** list (add items, set
   destinations, qty, pin, delete). This is the packing pass — check items as they go into the
   truck. Then the *Leaving home* safety checklist to advance.
 - **Stop 1 — Warehouse (GO):** **safety checklist only** (moving food truck→RV here is
@@ -659,13 +631,11 @@ thing physically in the truck, not a line to edit; removing items from the trip 
 **stop 0 (Home)**, on the editable checklists.
 
 **Only what was handled travels to the next stop.** The derived stop views (stops 2–4) draw
-from every checklist, but an item appears at a stop **only if it was checked off at an earlier
+from the trip's list, but an item appears at a stop **only if it was checked off at an earlier
 stop**. An item left unchecked never made it into the truck — it wasn't found, or the user
-chose not to bring it — so there is nothing to stow, sort, or bring inside for it. For a
-**grocery** item the handling is **buying** it: `checked` (= bought) admits it to the stops,
-and un-checking removes it again. For an **Other**-list item the handling is the per-stop
-check (`stagesDone`), which the checklist card also records at the trip's current stop. An
-item that was never handled simply never enters the route.
+chose not to bring it — so there is nothing to stow, sort, or bring inside for it. Handling is
+the per-stop check (`stagesDone`), which the checklist card also records at the trip's current
+stop. An item that was never handled simply never enters the route.
 
 **The return warehouse is a catch-up for the campsite.** Stop 3 exists to stow what was
 *forgotten* at the campsite, so an item **checked off at stop 2 does not appear at stop 3** —
@@ -680,8 +650,7 @@ It behaves like the persist pin: it is an **on/off flag** (`removeOnComplete`) t
 neither checks nor hides the item. The checklist-card checkbox and the stage checkbox are two
 views of the same "handled" state: checking an item from its **checklist card** records it as
 handled at the trip's **current stop** (and unchecking clears that stop), so both routes feed
-the rule below. **Grocery items are exempt** from that mirroring — there a check means
-"bought", which is what admits the item to the stops, not handling at one. When it is **on**,
+the rule below. When it is **on**,
 the item **never travels to a later stop**: being handled is exactly what retires it, and an
 item that was never handled doesn't travel anyway (see the rule above). When it is **off**, the
 item travels to the stops that follow the one where it was handled, subject to its destination.
@@ -740,8 +709,8 @@ the displayed icon is remapped Home→Truck at stops 2 and 3 (stored destination
 
 | Phase       | Label                 | Status                          |
 |-------------|-----------------------|---------------------------------|
-| `grocery`   | Groceries (per store) | active                          |
 | `other`     | Packing / "Bring to Truck" | active                     |
+| `grocery`   | Groceries (per store) | legacy — migrated into `other`   |
 | `pre_early` | Before the trip       | legacy — migrated into `other`  |
 | `pre_dayof` | Day of departure      | legacy — migrated into `other`  |
 | `pack_down` | Pack down / return    | legacy — migrated into `other`  |

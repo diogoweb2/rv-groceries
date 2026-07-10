@@ -5,6 +5,7 @@ import {
   backfillCatalogFromItems, dedupeCatalog, syncTripStatuses,
   ensureDefaultStores, migrateSupermarketListsToStoreIds, migrateGroceryChecklistsToStoreIds,
   migrateGroceryRvItemsToSpmktList, ensureDefaultProcedures, migratePhasesToOther,
+  migrateGroceryChecklistsToOther,
 } from '@/lib/firestore'
 import { useTrips } from '@/hooks/useFirestore'
 import { useAppStore } from '@/lib/store'
@@ -64,6 +65,11 @@ function StoreSync() {
         if (!localStorage.getItem('migratedPhasesToOther')) {
           await migratePhasesToOther()
           localStorage.setItem('migratedPhasesToOther', '1')
+        }
+        // Groceries left the trip screen: fold them into "Bring to Truck" (§8).
+        if (!localStorage.getItem('migratedGroceryToOther')) {
+          await migrateGroceryChecklistsToOther()
+          localStorage.setItem('migratedGroceryToOther', '1')
         }
       } catch {
         /* non-critical — will retry next load */

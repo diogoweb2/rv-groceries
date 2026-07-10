@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { useChecklistItems, useStores } from '@/hooks/useFirestore'
+import { useChecklistItems } from '@/hooks/useFirestore'
 import {
   updateChecklist, deleteChecklist, deleteChecklistItemAndPropagate,
   setItemPersist, setItemDestination, itemDestination, setItemRemoveOnComplete,
   savePinnedChecklist, removePinnedChecklist,
   pushPinnedChecklistToTrips,
   setChecklistItemChecked, updateChecklistItemAndPropagate,
-  unlinkChecklistItemFromSupermarket,
 } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Progress } from '@/components/ui/progress'
@@ -19,11 +18,9 @@ import { printLists } from '@/lib/print'
 import { destinationMeta, destinationIcon, nextDestination } from './destination'
 import type { Checklist, ChecklistItem } from '@/types'
 
-// Build a printable line for an item: name plus quantity where it's meaningful
-// (non-grocery lists show "× N"; grocery lists show "N ×").
-function printLine(item: ChecklistItem, isGrocery: boolean): string {
+// Build a printable line for an item: name plus quantity where it's meaningful.
+function printLine(item: ChecklistItem): string {
   const qty = Math.max(1, Number(item.qty) || 1)
-  if (isGrocery) return qty > 1 ? `${qty} × ${item.name}` : item.name
   return item.qty && qty > 1 ? `${item.name} × ${item.qty}` : item.name
 }
 
@@ -38,13 +35,11 @@ interface Props {
 export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }: Props) {
   const identity = useAppStore(s => s.identity)!
   const items = useChecklistItems(tripId, checklist.id)
-  const stores = useStores()
   const [expanded, setExpanded] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
   const [itemMenu, setItemMenu] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [showCompleted, setShowCompleted] = useState(true)
-  const isGrocery = checklist.phase === 'grocery'
 
   const checked = items.filter(i => i.checked).length
   const total = items.length
@@ -79,20 +74,17 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
       completeRef.current = isComplete
       return
     }
-    // Store-linked grocery checklists are managed from the Supermarket side and
-    // are routinely "all bought" — auto-hiding them would swallow items the user
-    // expects to see mirrored into the trip. Only auto-hide hand-made lists.
-    if (isComplete && !completeRef.current && !checklist.hidden && !isGrocery) {
+    if (isComplete && !completeRef.current && !checklist.hidden) {
       updateChecklist(tripId, checklist.id, { hidden: true })
     }
     completeRef.current = isComplete
-  }, [checked, total, checklist.hidden, checklist.name, checklist.id, tripId, isGrocery])
+  }, [checked, total, checklist.hidden, checklist.name, checklist.id, tripId])
 
   function handlePrint() {
     setMenuOpen(false)
     printLists(checklistTitle(checklist), [{
       name: checklistTitle(checklist),
-      items: items.filter(i => !i.checked).map(i => printLine(i, isGrocery)),
+      items: items.filter(i => !i.checked).map(i => printLine(i)),
     }])
   }
 
@@ -148,20 +140,6 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
       await savePinnedChecklist(newName, checklist.phase, items, identity)
     }
     await updateChecklist(tripId, checklist.id, { name: newName })
-    setRenaming(null)
-  }
-
-  async function handleChangeStore(store: { id: string; name: string }) {
-    if (checklist.pinned) {
-      await removePinnedChecklist(checklist.phase, checklist.name)
-      await savePinnedChecklist(store.name, checklist.phase, items, identity)
-    }
-    await updateChecklist(tripId, checklist.id, { name: store.name, storeId: store.id })
-    // Existing items were linked to the old store's Supermarket list — unlink
-    // them so they don't keep writing to the wrong store (§8).
-    for (const item of items) {
-      if (item.linkedSupermarketListId) await unlinkChecklistItemFromSupermarket(item, identity)
-    }
     setRenaming(null)
   }
 
@@ -222,7 +200,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
                   onClick={() => { setMenuOpen(false); setRenaming(checklist.name) }}
                   className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
                 >
-                  <Pencil className="w-4 h-4" /> {isGrocery ? 'Change store' : 'Rename'}
+                  <Pencil className="w-4 h-4" /> Rename
                 </button>
                 <button
                   onClick={() => { setMenuOpen(false); setShowCompleted(v => !v) }}
@@ -285,7 +263,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
                 <span className={`text-base ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                   {item.name}
                 </span>
-                {item.qty && !isGrocery && (
+                {item.qty && !item.linkedSupermarketItemId && (
                   <span className="text-sm text-gray-500 ml-1">× {item.qty}</span>
                 )}
                 {item.frozenField && (
@@ -293,8 +271,8 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
                 )}
               </div>
 
-              {/* Quantity stepper (grocery items only) */}
-              {isGrocery && (
+              {/* Quantity stepper — shopping items, whose qty syncs to Supermarket */}
+              {item.linkedSupermarketItemId && (
                 <div className="flex items-center gap-1 shrink-0">
                   <button
                     onClick={() => handleChangeQty(item, -1)}
@@ -396,41 +374,23 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
         </div>
       )}
 
-      {/* Rename / change-store dialog */}
-      <Dialog open={renaming !== null} onClose={() => setRenaming(null)} title={isGrocery ? 'Change store' : 'Rename checklist'}>
-        {isGrocery ? (
-          <div className="flex flex-col gap-2">
-            {stores.map(s => (
-              <button
-                key={s.id}
-                onClick={() => handleChangeStore(s)}
-                className={`text-left py-2.5 px-3 rounded-xl text-sm font-medium border-2 transition-colors ${
-                  checklist.storeId === s.id ? 'border-[#2f6b4f] bg-[#2f6b4f] text-white' : 'border-gray-200 text-gray-600'
-                }`}
-              >
-                {s.name}
-              </button>
-            ))}
-            {stores.length === 0 && (
-              <p className="text-sm text-gray-500">No stores yet. Add one in Manage → Stores.</p>
-            )}
+      {/* Rename dialog */}
+      <Dialog open={renaming !== null} onClose={() => setRenaming(null)} title="Rename checklist">
+        <div className="flex flex-col gap-4">
+          <Input
+            value={renaming ?? ''}
+            onChange={e => setRenaming(e.target.value)}
+            placeholder="Checklist name"
+            autoFocus
+            onKeyDown={e => e.key === 'Enter' && handleRename()}
+          />
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setRenaming(null)}>Cancel</Button>
+            <Button className="flex-1" onClick={handleRename} disabled={!renaming?.trim()}>Save</Button>
           </div>
-        ) : (
-          <div className="flex flex-col gap-4">
-            <Input
-              value={renaming ?? ''}
-              onChange={e => setRenaming(e.target.value)}
-              placeholder="Checklist name"
-              autoFocus
-              onKeyDown={e => e.key === 'Enter' && handleRename()}
-            />
-            <div className="flex gap-2">
-              <Button variant="secondary" className="flex-1" onClick={() => setRenaming(null)}>Cancel</Button>
-              <Button className="flex-1" onClick={handleRename} disabled={!renaming?.trim()}>Save</Button>
-            </div>
-          </div>
-        )}
+        </div>
       </Dialog>
+
     </div>
   )
 }

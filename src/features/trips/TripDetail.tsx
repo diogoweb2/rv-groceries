@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useTrips, useChecklists, useAmenities, useOrdering, useStores, useProcedures } from '@/hooks/useFirestore'
-import { updateTrip, deleteTrip, completeTrip, savePhaseOrder, saveChecklistOrder, saveChecklistPositions, rateTrip, getTripChecklistsWithItems, findOrCreateOtherChecklist, ensureGroceryChecklists, TRIP_STOPS } from '@/lib/firestore'
+import { useTrips, useChecklists, useAmenities, useOrdering, useProcedures } from '@/hooks/useFirestore'
+import { updateTrip, deleteTrip, completeTrip, savePhaseOrder, saveChecklistOrder, saveChecklistPositions, rateTrip, getTripChecklistsWithItems, findOrCreateOtherChecklist, TRIP_STOPS } from '@/lib/firestore'
 import { checklistTitle } from '@/lib/checklistTitle'
 import { printLists, type PrintList } from '@/lib/print'
 import { useAppStore } from '@/lib/store'
@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog } from '@/components/ui/dialog'
-import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, CircleCheck, Plus, Check, Tag, GripVertical, Pencil, MapPin, Star, Eye, Backpack, Truck, PackageOpen, ShoppingCart, Printer, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, CircleCheck, Plus, Check, Tag, GripVertical, Pencil, MapPin, Star, Eye, Backpack, Truck, PackageOpen, Printer, type LucideIcon } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -25,9 +25,9 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import type { Trip, ChecklistPhase, Checklist } from '@/types'
 
-// Two-list model (§20): only Groceries (per store) and a single Other list.
+// Single-list model (§8/§20): a trip has one Other list; groceries live in
+// Supermarket and mirror into it when flagged for camping.
 const PHASE_LABELS: Record<string, string> = {
-  grocery: 'Groceries',
   other: 'Packing',
   pre_early: 'Before the trip',
   pre_dayof: 'Day of departure',
@@ -35,7 +35,6 @@ const PHASE_LABELS: Record<string, string> = {
 }
 
 const PHASE_ICONS: Record<string, LucideIcon> = {
-  grocery: ShoppingCart,
   other: Backpack,
   pre_early: Backpack,
   pre_dayof: Truck,
@@ -160,7 +159,6 @@ export function TripDetail() {
   )
   const [menuOpen, setMenuOpen] = useState(false)
   const [addingTo, setAddingTo] = useState<string | null>(null)
-  const stores = useStores()
   const [editAmenities, setEditAmenities] = useState<string[] | null>(null)
   const [editTitle, setEditTitle] = useState<string | null>(null)
   const [ratingOpen, setRatingOpen] = useState(false)
@@ -176,11 +174,6 @@ export function TripDetail() {
       findOrCreateOtherChecklist(id)
     }
   }, [id, checklists])
-
-  // …and one Groceries list per store, created automatically (§20).
-  useEffect(() => {
-    if (id && stores.length > 0) ensureGroceryChecklists(id, stores)
-  }, [id, stores])
 
   const trip = trips.find(t => t.id === id)
   if (!trip) return (
@@ -203,10 +196,8 @@ export function TripDetail() {
         .filter(d => d.checklist.phase === phase && !d.checklist.hidden)
         .sort((a, b) => a.checklist.order - b.checklist.order)
       for (const { checklist, items } of inPhase) {
-        const isGrocery = checklist.phase === 'grocery'
         const outstanding = items.filter(i => !i.checked).map(i => {
           const qty = Math.max(1, Number(i.qty) || 1)
-          if (isGrocery) return qty > 1 ? `${qty} × ${i.name}` : i.name
           return i.qty && qty > 1 ? `${i.name} × ${i.qty}` : i.name
         })
         lists.push({ name: checklistTitle(checklist), items: outstanding })
@@ -308,10 +299,10 @@ export function TripDetail() {
     return acc
   }, {})
 
-  // Phase sections to show (only non-empty ones). Two-list model puts Other and
-  // Groceries first; legacy phases only linger until migration collapses them.
+  // Phase sections to show (only non-empty ones). Other comes first; legacy
+  // phases only linger until migration collapses them.
   const phaseRenderOrder = Array.from(new Set<string>([
-    'other', 'grocery', ...ordering.phaseOrder, 'pre_early', 'pre_dayof', 'pack_down',
+    'other', ...ordering.phaseOrder, 'pre_early', 'pre_dayof', 'pack_down',
   ]))
   const visiblePhases = phaseRenderOrder.filter(p => byPhase[p]?.length) as ChecklistPhase[]
 

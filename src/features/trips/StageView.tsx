@@ -22,13 +22,11 @@ function ItemsCollector({ tripId, checklist, onItems }: {
   return null
 }
 
-// The stops at which an item counts as handled.
-// - Groceries: buying it (`checked`) is the handling, and it happens at Home.
-// - Other items: the per-stop marks. Items checked from a checklist card before
-//   the card check began mirroring into `stagesDone` have `checked: true` and no
-//   stops recorded, so read those as handled at Home too.
-function handledStops(item: ChecklistItem, isGrocery: boolean): number[] {
-  if (isGrocery) return item.checked ? [0] : []
+// The stops at which an item counts as handled: its per-stop marks. Items
+// checked from a checklist card before the card check began mirroring into
+// `stagesDone` have `checked: true` and no stops recorded, so read those as
+// handled at Home.
+function handledStops(item: ChecklistItem): number[] {
   const stages = item.stagesDone ?? []
   if (stages.length === 0 && item.checked) return [0]
   return stages
@@ -45,11 +43,9 @@ export function StageView({ trip, checklists }: { trip: Trip; checklists: Checkl
   const stop = Math.min(Math.max(trip.currentStop ?? 0, 0), TRIP_STOPS.length - 1)
   const stage = TRIP_STAGES[stop]
 
-  const groceryListIds = new Set(checklists.filter(c => c.phase === 'grocery').map(c => c.id))
-
   // Only what was actually handled at an earlier stop travels to this one (§20):
   // an item left unchecked never made it into the truck, so there is nothing to
-  // stow, sort, or bring inside. An unbought grocery is the same case.
+  // stow, sort, or bring inside.
   // "Remove after completion" items are the exception in reverse — being handled
   // is exactly what retires them, so they don't travel on.
   //
@@ -59,7 +55,7 @@ export function StageView({ trip, checklists }: { trip: Trip; checklists: Checkl
   const allItems = checklists
     .flatMap(c => itemsByList[c.id] ?? [])
     .filter(i => {
-      const handled = handledStops(i, groceryListIds.has(i.checklistId))
+      const handled = handledStops(i)
       const handledEarlier = handled.some(s => s < stop)
       const stowedAtCampsite = stop === 3 && handled.includes(2)
       return handledEarlier && !i.removeOnComplete && !stowedAtCampsite

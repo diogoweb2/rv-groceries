@@ -348,6 +348,52 @@ export async function migratePhasesToOther() {
   }
 }
 
+// One-time migration to the single-list model (§8): trips no longer have
+// Groceries checklists — groceries are built in Supermarket and land in the
+// trip's Other list when flagged for camping. Move every grocery item into
+// Other (destination Truck, the default for camping groceries), re-point any
+// live Supermarket link at its new home, and delete the grocery checklists.
+export async function migrateGroceryChecklistsToOther() {
+  const tripsSnap = await getDocs(collection(db, 'trips'))
+  for (const tripDoc of tripsSnap.docs) {
+    const tripId = tripDoc.id
+    const checklistsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
+    const groceryLists = checklistsSnap.docs.filter((d) => (d.data().phase as string) === 'grocery')
+    if (groceryLists.length === 0) continue
+
+    const otherId = await findOrCreateOtherChecklist(tripId)
+    const otherItemsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists', otherId, 'items'))
+    const otherNames = new Set(otherItemsSnap.docs.map((d) => ((d.data().name as string) ?? '').trim().toLowerCase()))
+    let order = otherItemsSnap.size
+
+    for (const cl of groceryLists) {
+      const itemsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists', cl.id, 'items'))
+      for (const itemDoc of itemsSnap.docs) {
+        const data = itemDoc.data()
+        const key = ((data.name as string) ?? '').trim().toLowerCase()
+        await deleteDoc(itemDoc.ref)
+        if (!key || otherNames.has(key)) continue
+        const destRef = doc(collection(db, 'trips', tripId, 'checklists', otherId, 'items'))
+        await setDoc(destRef, {
+          ...data,
+          checklistId: otherId,
+          order: order++,
+          destination: data.destination ?? 'truck',
+        })
+        otherNames.add(key)
+        // Keep the Supermarket side pointing at the moved copy, not the deleted one.
+        if (data.linkedSupermarketListId && data.linkedSupermarketItemId) {
+          await updateDoc(
+            doc(db, 'supermarketLists', data.linkedSupermarketListId as string, 'items', data.linkedSupermarketItemId as string),
+            { linkedChecklistId: otherId, linkedItemId: destRef.id },
+          ).catch(() => {})
+        }
+      }
+      await deleteDoc(cl.ref)
+    }
+  }
+}
+
 // ── Item Catalog ──────────────────────────────────────────────────────────────
 
 export function subscribeCatalog(cb: (items: CatalogItem[]) => void) {
@@ -805,21 +851,6 @@ export async function findOrCreateOtherChecklist(tripId: string): Promise<string
   return ref.id
 }
 
-// Every trip gets one Groceries checklist per store, automatically (§20). Stores
-// are never picked by hand; a store added later shows up on the next trip open.
-export async function ensureGroceryChecklists(tripId: string, stores: Store[]) {
-  if (stores.length === 0) return
-  const snap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
-  const existing = snap.docs.map((d) => d.data() as Checklist)
-  const haveStoreIds = new Set(existing.filter((c) => c.phase === 'grocery').map((c) => c.storeId))
-  const missing = stores.filter((s) => !haveStoreIds.has(s.id))
-  if (missing.length === 0) return
-  let order = existing.filter((c) => c.phase === 'grocery').length
-  for (const s of missing) {
-    await addChecklist(tripId, { name: s.name, phase: 'grocery', order: order++, storeId: s.id })
-  }
-}
-
 export function subscribeProcedures(cb: (items: Procedure[]) => void) {
   return onSnapshot(collection(db, 'procedures'), (snap) =>
     cb(snap.docs.map((d) => docData<Procedure>(d)))
@@ -1008,28 +1039,6 @@ export async function updateChecklist(tripId: string, checklistId: string, data:
   return updateDoc(doc(db, 'trips', tripId, 'checklists', checklistId), clean(data))
 }
 
-// Find a trip's grocery checklist for a given store, creating one (named
-// after the store) if none exists yet. Used to land a Supermarket item
-// flagged "for camping" into the right list (§8/§15).
-export async function findOrCreateGroceryChecklist(
-  tripId: string,
-  storeId: string,
-  storeName: string,
-): Promise<string> {
-  const snap = await getDocs(collection(db, 'trips', tripId, 'checklists'))
-  const existing = snap.docs.find((d) => d.data().phase === 'grocery' && d.data().storeId === storeId)
-  if (existing) return existing.id
-  const order = snap.docs.filter((d) => d.data().phase === 'grocery').length
-  const ref = await addDoc(collection(db, 'trips', tripId, 'checklists'), {
-    tripId,
-    name: storeName,
-    phase: 'grocery' as const,
-    order,
-    storeId,
-  })
-  return ref.id
-}
-
 export async function deleteChecklist(tripId: string, checklistId: string) {
   // Clear the items subcollection before removing the checklist document.
   const itemsSnap = await getDocs(collection(db, 'trips', tripId, 'checklists', checklistId, 'items'))
@@ -1136,10 +1145,9 @@ export async function deleteItem(tripId: string, checklistId: string, itemId: st
   return deleteDoc(doc(db, 'trips', tripId, 'checklists', checklistId, 'items', itemId))
 }
 
-// Check/uncheck a checklist item, applying the persist-recurring rule (§12),
-// the grocery-checked → copy-to-RV rule (§8), and — when this item is
-// live-linked to a Supermarket item (§8/§15) — propagating the same checked
-// state there.
+// Check/uncheck a checklist item, applying the persist-recurring rule (§12).
+// A trip item's check means "handled at this stop"; it is never propagated to a
+// live-linked Supermarket item, where a check means "bought" (§8).
 export async function setChecklistItemChecked(
   tripId: string,
   checklist: Checklist,
@@ -1150,17 +1158,12 @@ export async function setChecklistItemChecked(
   // The checklist-card checkbox and the stage checkbox are two views of the same
   // "handled" state (§20). Mirror the card check into `stagesDone` at the trip's
   // current stop, so a "remove after completion" item checked from the card also
-  // drops out of the later stops. Groceries are exempt: there `checked` means
-  // "bought", which is what puts the item into the stops, not a stop's handling.
-  if (checklist.phase === 'grocery') {
-    await toggleItem(tripId, checklist.id, item.id, checked, identity, item.rev)
-  } else {
-    const stop = await getTripCurrentStop(tripId)
-    const stagesDone = checked
-      ? Array.from(new Set([...(item.stagesDone ?? []), stop]))
-      : (item.stagesDone ?? []).filter(s => s !== stop)
-    await updateItem(tripId, checklist.id, item.id, { checked, stagesDone }, identity, item.rev)
-  }
+  // drops out of the later stops.
+  const stop = await getTripCurrentStop(tripId)
+  const stagesDone = checked
+    ? Array.from(new Set([...(item.stagesDone ?? []), stop]))
+    : (item.stagesDone ?? []).filter(s => s !== stop)
+  await updateItem(tripId, checklist.id, item.id, { checked, stagesDone }, identity, item.rev)
 
   if (item.persist) {
     if (checked) {
@@ -1176,22 +1179,7 @@ export async function setChecklistItemChecked(
   // NOTE (§20): the old copy-on-check rules (bought grocery → "Spmkt->Truck",
   // destination-home → "Bringing back items") are retired under the stage-driven
   // flow — those lists no longer exist; each stop derives its own view from item
-  // destinations instead. Only the Supermarket "bought" sync remains below.
-
-  if (item.linkedSupermarketListId && item.linkedSupermarketItemId) {
-    const linkedSnap = await getDoc(
-      doc(db, 'supermarketLists', item.linkedSupermarketListId, 'items', item.linkedSupermarketItemId)
-    )
-    if (linkedSnap.exists()) {
-      await updateSupermarketItem(
-        item.linkedSupermarketListId,
-        item.linkedSupermarketItemId,
-        { checked },
-        identity,
-        (linkedSnap.data().rev as number) ?? 0,
-      )
-    }
-  }
+  // destinations instead.
 }
 
 // Update a checklist item and, when it's live-linked to a Supermarket item,
@@ -1232,81 +1220,6 @@ export async function deleteChecklistItemAndPropagate(
   if (item.linkedSupermarketListId && item.linkedSupermarketItemId) {
     await deleteSupermarketItem(item.linkedSupermarketListId, item.linkedSupermarketItemId)
   }
-}
-
-// Clear the live link between a grocery item and its Supermarket counterpart
-// without deleting either doc — used when a grocery checklist changes store
-// (§8), since the old link no longer represents the same store's list.
-export async function unlinkChecklistItemFromSupermarket(item: ChecklistItem, identity: UserIdentity) {
-  if (!item.linkedSupermarketListId || !item.linkedSupermarketItemId) return
-  await updateDoc(doc(db, 'supermarketLists', item.linkedSupermarketListId, 'items', item.linkedSupermarketItemId), {
-    forCamping: false,
-    linkedTripId: deleteField(),
-    linkedChecklistId: deleteField(),
-    linkedItemId: deleteField(),
-    updatedBy: identity,
-    updatedAt: new Date().toISOString(),
-  })
-  await updateDoc(doc(db, 'trips', item.tripId, 'checklists', item.checklistId, 'items', item.id), {
-    linkedSupermarketListId: deleteField(),
-    linkedSupermarketItemId: deleteField(),
-    updatedBy: identity,
-    updatedAt: new Date().toISOString(),
-  })
-}
-
-// When a new item is added to a store-linked grocery checklist that belongs
-// to the next/active trip, mirror it into that store's active Supermarket
-// list (§8) — adopting an existing same-name item there instead of
-// duplicating, same idempotency rule as elsewhere in the app. No-op for
-// checklists without a linked store, or trips that aren't next/active.
-export async function mirrorGroceryItemToSupermarket(
-  tripId: string,
-  checklist: Checklist,
-  itemId: string,
-  item: { name: string; catalogItemId?: string; qty?: string; checked: boolean },
-  trips: Trip[],
-  identity: UserIdentity,
-) {
-  if (checklist.phase !== 'grocery' || !checklist.storeId) return
-  const nextTrip = findNextOrActiveTrip(trips)
-  if (!nextTrip || nextTrip.id !== tripId) return
-
-  const listId = await ensureActiveSupermarketList(checklist.storeId, identity)
-  const itemsCol = collection(db, 'supermarketLists', listId, 'items')
-  const itemsSnap = await getDocs(itemsCol)
-  // Only adopt a same-name item that isn't already linked to a *different*
-  // trip — otherwise we'd silently steal its link (§8 "sticky to its trip").
-  const existing = itemsSnap.docs.find(
-    (d) =>
-      ((d.data().name as string) ?? '').toLowerCase() === item.name.toLowerCase() &&
-      (!d.data().linkedTripId || d.data().linkedTripId === tripId)
-  )
-
-  let smItemId: string
-  if (existing) {
-    smItemId = existing.id
-    await updateSupermarketItem(listId, smItemId, {
-      forCamping: true, linkedTripId: tripId, linkedChecklistId: checklist.id, linkedItemId: itemId,
-    }, identity, (existing.data().rev as number) ?? 0)
-  } else {
-    const ref = await addSupermarketItem(
-      listId,
-      {
-        catalogItemId: item.catalogItemId, name: item.name, qty: item.qty || '1',
-        forCamping: true, checked: item.checked, order: itemsSnap.size,
-      },
-      identity,
-    )
-    smItemId = ref.id
-    await updateSupermarketItem(listId, smItemId, {
-      linkedTripId: tripId, linkedChecklistId: checklist.id, linkedItemId: itemId,
-    }, identity, 1)
-  }
-
-  await updateItem(tripId, checklist.id, itemId, {
-    linkedSupermarketListId: listId, linkedSupermarketItemId: smItemId,
-  }, identity, 1)
 }
 
 // ── Persistent (recurring) items ──────────────────────────────────────────────
@@ -1850,9 +1763,9 @@ export async function deleteSupermarketItemAndPropagate(item: SupermarketItem) {
   await deleteSupermarketItem(item.listId, item.id)
 }
 
-// Mark a supermarket item bought/unbought and, when it's live-linked to a trip
-// grocery item, propagate the same state there — which in turn cascades the
-// grocery-checked → copy-to-RV rule (§8) via setChecklistItemChecked.
+// Mark a supermarket item bought/unbought. Deliberately *not* propagated to a
+// live-linked trip item: bought at the store and loaded into the truck are two
+// different acts, each with its own check (§8).
 export async function setSupermarketItemChecked(
   list: SupermarketList,
   item: SupermarketItem,
@@ -1861,20 +1774,10 @@ export async function setSupermarketItemChecked(
   extra?: Partial<SupermarketItem>,
 ) {
   await updateSupermarketItem(list.id, item.id, { checked, ...extra }, identity, item.rev)
-  if (!item.linkedTripId || !item.linkedChecklistId || !item.linkedItemId) return
-
-  const [checklistSnap, tripItemSnap] = await Promise.all([
-    getDoc(doc(db, 'trips', item.linkedTripId, 'checklists', item.linkedChecklistId)),
-    getDoc(doc(db, 'trips', item.linkedTripId, 'checklists', item.linkedChecklistId, 'items', item.linkedItemId)),
-  ])
-  if (!checklistSnap.exists() || !tripItemSnap.exists()) return
-  const tripItem = docData<ChecklistItem>(tripItemSnap)
-  if (tripItem.checked === checked) return
-  await setChecklistItemChecked(item.linkedTripId, docData<Checklist>(checklistSnap), tripItem, checked, identity)
 }
 
 // Adjust a supermarket item's quantity and, when it's live-linked to a trip
-// grocery item, propagate the new quantity there too.
+// item, propagate the new quantity there too.
 export async function setSupermarketItemQty(
   list: SupermarketList,
   item: SupermarketItem,
@@ -1893,15 +1796,14 @@ export async function setSupermarketItemQty(
   )
 }
 
-// Flip a supermarket item's camping flag on: mirror it into the matching
-// store's grocery checklist in the next/active trip (creating the checklist
-// if needed), adopting a same-name item there if one already exists. No-op if
-// there's no next/active trip. Folds in the checked → copy-to-RV rule (§8) if
-// the item is already bought.
+// Flip a supermarket item's camping flag on: mirror it into the next/active
+// trip's "Bring to Truck" (Other) list with the Truck destination, adopting a
+// same-name item there if one already exists. No-op if there's no next/active
+// trip. The trip copy starts unchecked — buying it in Supermarket is not the
+// same as loading it into the truck (§8).
 export async function linkSupermarketItemToTrip(
   list: SupermarketList,
   item: SupermarketItem,
-  store: Store,
   trips: Trip[],
   identity: UserIdentity,
 ) {
@@ -1914,7 +1816,7 @@ export async function linkSupermarketItemToTrip(
   if (!freshSnap.exists()) return
   const fresh = docData<SupermarketItem>(freshSnap)
 
-  const checklistId = await findOrCreateGroceryChecklist(target.id, store.id, store.name)
+  const checklistId = await findOrCreateOtherChecklist(target.id)
   const itemsCol = collection(db, 'trips', target.id, 'checklists', checklistId, 'items')
   const itemsSnap = await getDocs(itemsCol)
   // Only adopt a same-name trip item that isn't already linked to a
@@ -1940,7 +1842,7 @@ export async function linkSupermarketItemToTrip(
       target.id, checklistId,
       clean({
         catalogItemId: fresh.catalogItemId, name: fresh.name, qty: fresh.qty || '1',
-        checked: fresh.checked, order: itemsSnap.size, destination: 'truck' as const,
+        checked: false, order: itemsSnap.size, destination: 'truck' as const,
         linkedSupermarketListId: list.id, linkedSupermarketItemId: fresh.id,
       }) as Omit<ChecklistItem, 'id' | 'tripId' | 'checklistId'>,
       identity,
@@ -1956,7 +1858,7 @@ export async function linkSupermarketItemToTrip(
 }
 
 // Flip a supermarket item's camping flag off: remove its mirrored copy from
-// the trip's grocery checklist and clear the link.
+// the trip's "Bring to Truck" list and clear the link.
 export async function unlinkSupermarketItemFromTrip(item: SupermarketItem, identity: UserIdentity) {
   if (item.linkedTripId && item.linkedChecklistId && item.linkedItemId) {
     await deleteDoc(doc(db, 'trips', item.linkedTripId, 'checklists', item.linkedChecklistId, 'items', item.linkedItemId))
