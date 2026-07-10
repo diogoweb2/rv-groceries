@@ -64,6 +64,15 @@ export function SupermarketHome() {
         )}
       </div>
 
+      <div className="px-4 pb-2">
+        <button
+          onClick={() => navigate('/manage/stores')}
+          className="text-sm font-medium text-[#2f6b4f] active:opacity-70"
+        >
+          Edit/Add Stores
+        </button>
+      </div>
+
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         {active.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400">
