@@ -87,9 +87,13 @@ per-store shopping lists for Diogo; items flagged for camping there flow into th
   via "Mark Complete" — records usage stats (see §7). Stats are recorded **exactly once** per
   trip, guarded by a `statsRecorded` flag, so re-completing or auto-completing never
   double-counts.
-- **Amenities** can be selected at creation and **edited afterward** from the trip (header
-  chips or menu → Edit amenities). Editing amenities updates the trip record and future stats,
-  but does **not** retroactively change items already suggested into checklists.
+- **Editing a trip.** A single **Edit trip** dialog — opened by the pencil next to the trip
+  title, or menu → Edit trip — edits the **name, start/end dates and amenities** together.
+  Save requires a non-empty name and an end date not before the start date. There is no
+  separate name-only or amenities-only dialog; the header amenity chips are display-only.
+- **Amenities** can be selected at creation and **edited afterward** via that dialog. Editing
+  amenities updates the trip record and future stats, but does **not** retroactively change
+  items already suggested into checklists.
 - **Deletion** removes the trip and **all nested checklists and their items** (no orphaned
   data). It takes effect immediately, with no confirmation.
 - **Auto-checklists on creation.** When a trip is created, one checklist is generated per

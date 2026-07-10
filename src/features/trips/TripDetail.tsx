@@ -144,6 +144,9 @@ function SortableChecklist({ checklist, tripId, onAddItem }: {
   )
 }
 
+// One dialog edits everything the trip header shows (§4).
+type TripEdit = { title: string; startDate: string; endDate: string; amenities: string[] }
+
 export function TripDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -159,8 +162,7 @@ export function TripDetail() {
   )
   const [menuOpen, setMenuOpen] = useState(false)
   const [addingTo, setAddingTo] = useState<string | null>(null)
-  const [editAmenities, setEditAmenities] = useState<string[] | null>(null)
-  const [editTitle, setEditTitle] = useState<string | null>(null)
+  const [editTrip, setEditTrip] = useState<TripEdit | null>(null)
   const [ratingOpen, setRatingOpen] = useState(false)
   const [pendingRating, setPendingRating] = useState(0)
   const [showHidden, setShowHidden] = useState(false)
@@ -245,16 +247,27 @@ export function TripDetail() {
     }
   }
 
-  async function handleSaveAmenities() {
-    if (editAmenities === null) return
-    await updateTrip(id!, { amenities: editAmenities })
-    setEditAmenities(null)
+  function openTripEditor() {
+    setEditTrip({
+      title: currentTrip.title,
+      startDate: currentTrip.startDate,
+      endDate: currentTrip.endDate,
+      amenities: currentTrip.amenities,
+    })
   }
 
-  async function handleSaveTitle() {
-    if (editTitle === null || !editTitle.trim()) return
-    await updateTrip(id!, { title: editTitle.trim() })
-    setEditTitle(null)
+  const tripEditValid = !!editTrip?.title.trim() && !!editTrip?.startDate && !!editTrip?.endDate
+    && editTrip.endDate >= editTrip.startDate
+
+  async function handleSaveTrip() {
+    if (!editTrip || !tripEditValid) return
+    await updateTrip(id!, {
+      title: editTrip.title.trim(),
+      startDate: editTrip.startDate,
+      endDate: editTrip.endDate,
+      amenities: editTrip.amenities,
+    })
+    setEditTrip(null)
   }
 
   function openInMaps() {
@@ -319,9 +332,9 @@ export function TripDetail() {
           <div className="flex-1 min-w-0 flex items-center gap-1">
             <h1 className="text-lg font-bold text-gray-800 truncate">{trip.title}</h1>
             <button
-              onClick={() => setEditTitle(trip.title)}
+              onClick={openTripEditor}
               className="shrink-0 p-1 text-gray-400 hover:text-gray-600"
-              aria-label="Edit trip name"
+              aria-label="Edit trip"
             >
               <Pencil className="w-3.5 h-3.5" />
             </button>
@@ -350,8 +363,8 @@ export function TripDetail() {
                       Mark as Planned
                     </button>
                   )}
-                  <button onClick={() => { setMenuOpen(false); setEditAmenities(trip.amenities) }} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
-                    <Tag className="w-4 h-4" /> Edit amenities
+                  <button onClick={() => { setMenuOpen(false); openTripEditor() }} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                    <Tag className="w-4 h-4" /> Edit trip
                   </button>
                   <button onClick={() => { setMenuOpen(false); setBatchRemoveOpen(true) }} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
                     <CircleCheck className="w-4 h-4" /> Remove after completion
@@ -384,10 +397,7 @@ export function TripDetail() {
             </div>
           )}
         </div>
-        <button
-          onClick={() => setEditAmenities(trip.amenities)}
-          className="flex flex-wrap items-center gap-1.5 px-5 pb-3 w-full text-left"
-        >
+        <div className="flex flex-wrap items-center gap-1.5 px-5 pb-3 w-full text-left">
           {trip.amenities.length > 0 ? (
             trip.amenities.map(aid => {
               const a = amenities.find(x => x.id === aid)
@@ -400,8 +410,7 @@ export function TripDetail() {
           ) : (
             <span className="text-xs text-gray-400">No amenities</span>
           )}
-          <span className="text-xs text-[#2f6b4f] font-medium ml-1">Edit</span>
-        </button>
+        </div>
         <div className="flex flex-col gap-2 px-5 pb-3">
           <button
             onClick={() => setPickingList(true)}
@@ -512,55 +521,74 @@ export function TripDetail() {
         />
       )}
 
-      {/* Edit amenities */}
-      <Dialog open={editAmenities !== null} onClose={() => setEditAmenities(null)} title="Trip amenities">
-        {editAmenities !== null && (
+      {/* Edit trip: name, dates and amenities in one place (§4) */}
+      <Dialog open={editTrip !== null} onClose={() => setEditTrip(null)} title="Edit trip">
+        {editTrip !== null && (
           <div className="flex flex-col gap-4">
-            {amenities.length === 0 ? (
-              <p className="text-sm text-gray-500">No amenities defined yet. Add some in Manage → Amenities.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {amenities.map(a => {
-                  const active = editAmenities.includes(a.id)
-                  return (
-                    <button
-                      key={a.id}
-                      onClick={() => setEditAmenities(
-                        active ? editAmenities.filter(x => x !== a.id) : [...editAmenities, a.id]
-                      )}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border-2 transition-colors ${
-                        active ? 'border-[#2f6b4f] bg-[#2f6b4f] text-white' : 'border-gray-200 bg-white text-gray-700'
-                      }`}
-                    >
-                      {active && <Check className="w-3.5 h-3.5" />}
-                      <span>{a.icon}</span>
-                      <span>{a.name}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-            <div className="flex gap-2 pt-1">
-              <Button variant="secondary" className="flex-1" onClick={() => setEditAmenities(null)}>Cancel</Button>
-              <Button className="flex-1" onClick={handleSaveAmenities}>Save</Button>
-            </div>
-          </div>
-        )}
-      </Dialog>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</span>
+              <Input
+                value={editTrip.title}
+                onChange={e => setEditTrip({ ...editTrip, title: e.target.value })}
+                autoFocus
+                onKeyDown={e => e.key === 'Enter' && handleSaveTrip()}
+              />
+            </label>
 
-      {/* Edit title dialog */}
-      <Dialog open={editTitle !== null} onClose={() => setEditTitle(null)} title="Edit trip name">
-        {editTitle !== null && (
-          <div className="flex flex-col gap-4">
-            <Input
-              value={editTitle}
-              onChange={e => setEditTitle(e.target.value)}
-              autoFocus
-              onKeyDown={e => e.key === 'Enter' && handleSaveTitle()}
-            />
             <div className="flex gap-2">
-              <Button variant="secondary" className="flex-1" onClick={() => setEditTitle(null)}>Cancel</Button>
-              <Button className="flex-1" onClick={handleSaveTitle} disabled={!editTitle.trim()}>Save</Button>
+              <label className="flex-1 flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Start</span>
+                <Input
+                  type="date"
+                  value={editTrip.startDate}
+                  onChange={e => setEditTrip({ ...editTrip, startDate: e.target.value })}
+                />
+              </label>
+              <label className="flex-1 flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">End</span>
+                <Input
+                  type="date"
+                  value={editTrip.endDate}
+                  min={editTrip.startDate}
+                  onChange={e => setEditTrip({ ...editTrip, endDate: e.target.value })}
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Amenities</span>
+              {amenities.length === 0 ? (
+                <p className="text-sm text-gray-500">No amenities defined yet. Add some in Manage → Amenities.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {amenities.map(a => {
+                    const active = editTrip.amenities.includes(a.id)
+                    return (
+                      <button
+                        key={a.id}
+                        onClick={() => setEditTrip({
+                          ...editTrip,
+                          amenities: active
+                            ? editTrip.amenities.filter(x => x !== a.id)
+                            : [...editTrip.amenities, a.id],
+                        })}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border-2 transition-colors ${
+                          active ? 'border-[#2f6b4f] bg-[#2f6b4f] text-white' : 'border-gray-200 bg-white text-gray-700'
+                        }`}
+                      >
+                        {active && <Check className="w-3.5 h-3.5" />}
+                        <span>{a.icon}</span>
+                        <span>{a.name}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button variant="secondary" className="flex-1" onClick={() => setEditTrip(null)}>Cancel</Button>
+              <Button className="flex-1" onClick={handleSaveTrip} disabled={!tripEditValid}>Save</Button>
             </div>
           </div>
         )}
