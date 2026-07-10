@@ -106,7 +106,7 @@ function SortableItem({
   }
 
   return (
-    <div ref={setNodeRef} className="relative border-b border-gray-50">
+    <div ref={setNodeRef} className={`relative border-b border-gray-50 ${menuOpen ? 'z-30' : ''}`}>
       {/* Delete affordance revealed as the row slides right. */}
       <div
         className={`absolute inset-y-0 left-0 flex items-center gap-2 px-4 text-white transition-colors ${
