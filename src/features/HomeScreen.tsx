@@ -1,4 +1,3 @@
-import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/lib/store'
 import { localToday } from '@/lib/date'
@@ -6,12 +5,10 @@ import { useTrips, useChecklists, useChecklistItems, useProcedures } from '@/hoo
 import { findNextOrActiveTrip, TRIP_STOPS, STOP_PROCEDURE, PROCEDURE_LABELS } from '@/lib/firestore'
 import { Progress } from '@/components/ui/progress'
 import { RigIcon, Campfire, Stars } from '@/components/CampScenes'
-import { Tent, Settings, Users, Plus, ChevronRight, CalendarDays, CheckCircle2, ListChecks, MapPin, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { Tent, Settings, Users, Plus, ChevronRight, CalendarDays, MapPin, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { TripReminderModal } from '@/features/trips/TripReminderModal'
-import { checklistTitle } from '@/lib/checklistTitle'
-import type { Trip, Checklist } from '@/types'
+import type { Trip } from '@/types'
 
-const PHASE_ORDER = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
 
 function formatDate(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -41,43 +38,6 @@ const TAGLINES: Record<DayPeriod, string> = {
   day: "Let's get you packed and on the road 🏕️",
   evening: 'Golden hour at the campsite hits different ✨',
   night: 'Marshmallow o’clock — the fire’s going 🔥',
-}
-
-// Reports its checked/total counts up to the parent so the card can aggregate.
-function ChecklistRow({
-  tripId,
-  checklist,
-  onCounts,
-  onOpen,
-}: {
-  tripId: string
-  checklist: Checklist
-  onCounts: (id: string, c: { checked: number; total: number }) => void
-  onOpen: () => void
-}) {
-  const items = useChecklistItems(tripId, checklist.id)
-  const checked = items.filter(i => i.checked).length
-  const total = items.length
-
-  useEffect(() => { onCounts(checklist.id, { checked, total }) }, [checklist.id, checked, total, onCounts])
-
-  const done = total > 0 && checked === total
-  return (
-    <button onClick={onOpen} className="flex items-center gap-3 w-full text-left py-2">
-      {done ? (
-        <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
-      ) : (
-        <ListChecks className="w-5 h-5 text-gray-300 shrink-0" />
-      )}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2 mb-1">
-          <span className="text-sm font-medium text-gray-800 truncate">{checklistTitle(checklist)}</span>
-          <span className="text-xs text-gray-400 shrink-0">{checked}/{total}</span>
-        </div>
-        <Progress value={total ? (checked / total) * 100 : 0} className="h-1.5" />
-      </div>
-    </button>
-  )
 }
 
 // "Right now" line (§20): where on the route the trip is and how many safety
@@ -112,18 +72,11 @@ function RouteNowLine({ trip }: { trip: Trip }) {
 function NextTripCard({ trip }: { trip: Trip }) {
   const navigate = useNavigate()
   const checklists = useChecklists(trip.id)
-  const [counts, setCounts] = useState<Record<string, { checked: number; total: number }>>({})
+  // A trip has exactly one list (§20), so the card's progress is that list's.
+  const items = useChecklistItems(trip.id, checklists[0]?.id)
 
-  const onCounts = useCallback((id: string, c: { checked: number; total: number }) => {
-    setCounts(prev => (prev[id]?.checked === c.checked && prev[id]?.total === c.total ? prev : { ...prev, [id]: c }))
-  }, [])
-
-  const totals = Object.values(counts).reduce(
-    (a, c) => ({ checked: a.checked + c.checked, total: a.total + c.total }),
-    { checked: 0, total: 0 }
-  )
+  const totals = { checked: items.filter(i => i.checked).length, total: items.length }
   const remaining = totals.total - totals.checked
-  const sorted = [...checklists].sort((a, b) => PHASE_ORDER.indexOf(a.phase) - PHASE_ORDER.indexOf(b.phase))
 
   return (
     <div className="sticker-card overflow-hidden">
@@ -150,20 +103,6 @@ function NextTripCard({ trip }: { trip: Trip }) {
         </div>
       </button>
 
-      {/* Per-checklist breakdown */}
-      {sorted.length > 0 && (
-        <div className="border-t border-gray-50 px-5 py-2 divide-y divide-gray-50">
-          {sorted.map(cl => (
-            <ChecklistRow
-              key={cl.id}
-              tripId={trip.id}
-              checklist={cl}
-              onCounts={onCounts}
-              onOpen={() => navigate(`/trips/${trip.id}`)}
-            />
-          ))}
-        </div>
-      )}
     </div>
   )
 }

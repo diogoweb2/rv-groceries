@@ -119,8 +119,9 @@ The Home screen focuses on a single trip, chosen in this priority:
 
 - **Countdown copy:** "Happening now" if active or today is within the date range; otherwise
   "Starts today", "Starts tomorrow", or "In N days".
-- The card shows aggregate packing progress and a per-checklist breakdown; the headline reads
-  "No items yet", "N left to pack", or "All packed".
+- The card shows packing progress for the trip's single list (§20); the headline reads
+  "No items yet", "N left to pack", or "All packed". There is **no per-checklist breakdown** —
+  with one list per trip it only ever restated the progress bar above it.
 
 ## 5. Checklists
 
