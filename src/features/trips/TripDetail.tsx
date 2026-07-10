@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTrips, useChecklists, useAmenities, useOrdering, useProcedures } from '@/hooks/useFirestore'
-import { updateTrip, deleteTrip, completeTrip, savePhaseOrder, saveChecklistOrder, saveChecklistPositions, rateTrip, getTripChecklistsWithItems, findOrCreateOtherChecklist, TRIP_STOPS } from '@/lib/firestore'
+import { updateTrip, deleteTrip, completeTrip, saveChecklistOrder, saveChecklistPositions, rateTrip, getTripChecklistsWithItems, findOrCreateOtherChecklist, TRIP_STOPS } from '@/lib/firestore'
 import { checklistTitle } from '@/lib/checklistTitle'
 import { printLists, type PrintList } from '@/lib/print'
 import { useAppStore } from '@/lib/store'
@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog } from '@/components/ui/dialog'
-import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, CircleCheck, Plus, Check, Tag, GripVertical, Pencil, MapPin, Star, Eye, Backpack, Truck, PackageOpen, Printer, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, MoreVertical, CalendarDays, Trash2, CheckCircle, CircleCheck, Plus, Check, Tag, Pencil, MapPin, Star, Eye, Printer } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
   type DragEndEvent,
@@ -26,21 +26,8 @@ import { CSS } from '@dnd-kit/utilities'
 import type { Trip, ChecklistPhase, Checklist } from '@/types'
 
 // Single-list model (§8/§20): a trip has one Other list; groceries live in
-// Supermarket and mirror into it when flagged for camping.
-const PHASE_LABELS: Record<string, string> = {
-  other: 'Packing',
-  pre_early: 'Before the trip',
-  pre_dayof: 'Day of departure',
-  pack_down: 'Pack down / return',
-}
-
-const PHASE_ICONS: Record<string, LucideIcon> = {
-  other: Backpack,
-  pre_early: Backpack,
-  pre_dayof: Truck,
-  pack_down: PackageOpen,
-}
-
+// Supermarket and mirror into it when flagged for camping. Stop 0 renders the
+// lists flat — grouping by destination only starts at the later stops.
 const STATUS_BADGE: Record<Trip['status'], { label: string; variant: 'default' | 'success' | 'warning' | 'info' }> = {
   planned: { label: 'Planned', variant: 'info' },
   active: { label: 'Active', variant: 'warning' },
@@ -92,35 +79,7 @@ function StarRating({ value, onChange }: { value: number; onChange: (v: number) 
 }
 
 // A draggable phase section (the whole group, with its header handle).
-function SortableSection({ phase, label, children }: { phase: ChecklistPhase; label: string; children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `phase:${phase}` })
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
-    zIndex: isDragging ? 20 : undefined,
-  }
-  const Icon = PHASE_ICONS[phase]
-  return (
-    <div ref={setNodeRef} style={style}>
-      <h2 className="flex items-center gap-1 text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1">
-        <button
-          {...attributes}
-          {...listeners}
-          aria-label="Reorder section"
-          className="-ml-1 p-1 text-gray-300 hover:text-gray-500 touch-none cursor-grab active:cursor-grabbing"
-        >
-          <GripVertical className="w-4 h-4" />
-        </button>
-        {Icon && <Icon className="w-4 h-4 text-gray-400 shrink-0" />}
-        {label}
-      </h2>
-      {children}
-    </div>
-  )
-}
-
-// A draggable checklist card within a section.
+// A draggable checklist card.
 function SortableChecklist({ checklist, tripId, onAddItem }: {
   checklist: Checklist
   tripId: string
@@ -224,18 +183,7 @@ export function TripDetail() {
     setMenuOpen(false)
   }
 
-  function handleSectionDragEnd(e: DragEndEvent) {
-    const { active, over } = e
-    if (!over || active.id === over.id) return
-    const from = String(active.id).replace('phase:', '') as ChecklistPhase
-    const to = String(over.id).replace('phase:', '') as ChecklistPhase
-    const oldIndex = ordering.phaseOrder.indexOf(from)
-    const newIndex = ordering.phaseOrder.indexOf(to)
-    if (oldIndex === -1 || newIndex === -1) return
-    savePhaseOrder(arrayMove(ordering.phaseOrder, oldIndex, newIndex))
-  }
-
-  function handleCardDragEnd(phase: ChecklistPhase, lists: Checklist[]) {
+  function handleCardDragEnd(lists: Checklist[]) {
     return (e: DragEndEvent) => {
       const { active, over } = e
       if (!over || active.id === over.id) return
@@ -244,7 +192,7 @@ export function TripDetail() {
       if (oldIndex === -1 || newIndex === -1) return
       const next = arrayMove(lists, oldIndex, newIndex)
       saveChecklistPositions(id!, next)        // persist positions on this trip
-      saveChecklistOrder(phase, next.map(c => c.name)) // remember for future trips
+      saveChecklistOrder(next[newIndex].phase, next.map(c => c.name)) // remember for future trips
     }
   }
 
@@ -319,6 +267,9 @@ export function TripDetail() {
     'other', ...ordering.phaseOrder, 'pre_early', 'pre_dayof', 'pack_down',
   ]))
   const visiblePhases = phaseRenderOrder.filter(p => byPhase[p]?.length) as ChecklistPhase[]
+
+  // Stop 0 shows one flat list of cards — no phase headers (§20).
+  const flatChecklists = visiblePhases.flatMap(p => byPhase[p])
 
   const stop = Math.min(Math.max(currentTrip.currentStop ?? 0, 0), TRIP_STOPS.length - 1)
 
@@ -465,30 +416,17 @@ export function TripDetail() {
             lists. Every later stop shows the derived, per-stop stage view (§20). */}
         {stop === 0 ? (
           <>
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSectionDragEnd}>
-              <SortableContext items={visiblePhases.map(p => `phase:${p}`)} strategy={verticalListSortingStrategy}>
-                <div className="flex flex-col gap-6">
-                  {visiblePhases.map(phase => {
-                    const phaseLists = byPhase[phase]
-                    return (
-                      <SortableSection key={phase} phase={phase} label={PHASE_LABELS[phase] ?? phase}>
-                        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCardDragEnd(phase, phaseLists)}>
-                          <SortableContext items={phaseLists.map(c => c.id)} strategy={verticalListSortingStrategy}>
-                            <div className="flex flex-col gap-3">
-                              {phaseLists.map(cl => (
-                                <SortableChecklist
-                                  key={cl.id}
-                                  checklist={cl}
-                                  tripId={id!}
-                                  onAddItem={() => setAddingTo(cl.id)}
-                                />
-                              ))}
-                            </div>
-                          </SortableContext>
-                        </DndContext>
-                      </SortableSection>
-                    )
-                  })}
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCardDragEnd(flatChecklists)}>
+              <SortableContext items={flatChecklists.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                <div className="flex flex-col gap-3">
+                  {flatChecklists.map(cl => (
+                    <SortableChecklist
+                      key={cl.id}
+                      checklist={cl}
+                      tripId={id!}
+                      onAddItem={() => setAddingTo(cl.id)}
+                    />
+                  ))}
                 </div>
               </SortableContext>
             </DndContext>
@@ -612,25 +550,15 @@ export function TripDetail() {
 
       {/* Pick a checklist to add an item to */}
       <Dialog open={pickingList} onClose={() => setPickingList(false)} title="Add item to…">
-        <div className="flex flex-col gap-4">
-          {visiblePhases.map(phase => (
-            <div key={phase}>
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                {(() => { const Icon = PHASE_ICONS[phase]; return Icon ? <Icon className="w-3.5 h-3.5" /> : null })()}
-                {PHASE_LABELS[phase] ?? phase}
-              </p>
-              <div className="flex flex-col gap-2">
-                {byPhase[phase].map(cl => (
-                  <button
-                    key={cl.id}
-                    onClick={() => handlePickListToAddItem(cl.id)}
-                    className="text-left py-2.5 px-3 rounded-xl text-sm font-medium border-2 border-gray-200 text-gray-700 hover:border-[#2f6b4f] transition-colors"
-                  >
-                    {checklistTitle(cl)}
-                  </button>
-                ))}
-              </div>
-            </div>
+        <div className="flex flex-col gap-2">
+          {flatChecklists.map(cl => (
+            <button
+              key={cl.id}
+              onClick={() => handlePickListToAddItem(cl.id)}
+              className="text-left py-2.5 px-3 rounded-xl text-sm font-medium border-2 border-gray-200 text-gray-700 hover:border-[#2f6b4f] transition-colors"
+            >
+              {checklistTitle(cl)}
+            </button>
           ))}
         </div>
       </Dialog>

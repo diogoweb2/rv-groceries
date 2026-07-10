@@ -601,7 +601,10 @@ See `STAGE_FLOW_SPEC.md` for the design rationale.
   and the per-store Groceries lists are both provisioned automatically (§8).
 - **List titles are display-only.** A list's stored `name` never changes (pinned lists key off
   it), but everywhere a list title is shown — card header, print output, add-item picker — the
-  Other list is rendered as **"Bring to Truck"**. Its section header reads **Packing**.
+  Other list is rendered as **"Bring to Truck"**.
+- **No section headers at Home.** Stop 0 shows the trip's lists as one flat, reorderable
+  stack of cards — there is no phase grouping or "Packing" header. Grouping by destination
+  only appears at the later stops' stage views (§20).
 
 ### The route
 
@@ -734,7 +737,7 @@ the displayed icon is remapped Home→Truck at stops 2 and 3 (stored destination
 
 | Phase       | Label                 | Status                          |
 |-------------|-----------------------|---------------------------------|
-| `other`     | Packing / "Bring to Truck" | active                     |
+| `other`     | "Bring to Truck"      | active                          |
 | `grocery`   | Groceries (per store) | legacy — migrated into `other`   |
 | `pre_early` | Before the trip       | legacy — migrated into `other`  |
 | `pre_dayof` | Day of departure      | legacy — migrated into `other`  |
