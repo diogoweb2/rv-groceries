@@ -3,6 +3,7 @@ import { useChecklistItems } from '@/hooks/useFirestore'
 import {
   updateChecklist, deleteChecklist, deleteChecklistItemAndPropagate,
   setItemPersist, setItemDestination, itemDestination, setItemRemoveOnComplete,
+  setItemRemindTo,
   savePinnedChecklist, removePinnedChecklist,
   pushPinnedChecklistToTrips,
   setChecklistItemChecked, updateChecklistItemAndPropagate,
@@ -12,11 +13,17 @@ import { Progress } from '@/components/ui/progress'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin, EyeOff, Eye, Check, CircleCheck, CircleDashed, Printer } from 'lucide-react'
+import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin, EyeOff, Eye, Check, CircleCheck, CircleDashed, Printer, Bell, BellOff } from 'lucide-react'
 import { checklistTitle } from '@/lib/checklistTitle'
 import { printLists } from '@/lib/print'
 import { destinationMeta, destinationIcon, nextDestination } from './destination'
-import type { Checklist, ChecklistItem } from '@/types'
+import type { Checklist, ChecklistItem, RemindTarget } from '@/types'
+
+const REMIND_OPTIONS: { value: RemindTarget; label: string }[] = [
+  { value: 'diogo', label: 'Diogo' },
+  { value: 'alice', label: 'Alice' },
+  { value: 'both', label: 'Both of us' },
+]
 
 // Build a printable line for an item: name plus quantity where it's meaningful.
 function printLine(item: ChecklistItem): string {
@@ -39,6 +46,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
   const [menuOpen, setMenuOpen] = useState(false)
   const [itemMenu, setItemMenu] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
+  const [reminding, setReminding] = useState<ChecklistItem | null>(null)
   const [showCompleted, setShowCompleted] = useState(true)
 
   const checked = items.filter(i => i.checked).length
@@ -107,6 +115,11 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
 
   async function handleToggleRemoveOnComplete(item: ChecklistItem) {
     await setItemRemoveOnComplete(tripId, checklist.id, item, !item.removeOnComplete, identity)
+  }
+
+  async function handleSetRemindTo(item: ChecklistItem, remindTo: RemindTarget | null) {
+    setReminding(null)
+    await setItemRemindTo(tripId, checklist.id, item, remindTo, identity)
   }
 
   async function handleDeleteItem(item: ChecklistItem) {
@@ -339,6 +352,14 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
                         {item.removeOnComplete && <Check className="w-4 h-4 shrink-0" />}
                       </button>
                       <button
+                        onClick={() => { setItemMenu(null); setReminding(item) }}
+                        className={`flex items-center gap-2 w-full px-4 py-2.5 text-sm hover:bg-gray-50 ${item.remindTo ? 'text-[#2f6b4f]' : 'text-gray-700'}`}
+                      >
+                        <Bell className="w-4 h-4 shrink-0" />
+                        <span className="flex-1 text-left">Remind me</span>
+                        {item.remindTo && <Check className="w-4 h-4 shrink-0" />}
+                      </button>
+                      <button
                         onClick={() => { setItemMenu(null); handleDeleteItem(item) }}
                         className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-gray-50"
                       >
@@ -373,6 +394,45 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
           </button>
         </div>
       )}
+
+      {/* Remind-me dialog (§21): who gets the push the day before the trip */}
+      <Dialog open={reminding !== null} onClose={() => setReminding(null)} title="Remind me">
+        {reminding && (
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-gray-500">
+              A push about <span className="font-medium text-gray-700">{reminding.name}</span> goes
+              out the day before the trip starts, at 6pm.
+            </p>
+            <div className="flex flex-col gap-2">
+              {REMIND_OPTIONS.map(opt => {
+                const on = reminding.remindTo === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleSetRemindTo(reminding, opt.value)}
+                    className={`flex items-center gap-2 w-full px-4 py-3 rounded-xl border text-sm text-left transition-colors ${
+                      on ? 'border-[#2f6b4f] bg-[#2f6b4f]/5 text-[#2f6b4f]' : 'border-gray-200 text-gray-700'
+                    }`}
+                  >
+                    <Bell className={`w-4 h-4 shrink-0 ${on ? '' : 'text-gray-300'}`} />
+                    <span className="flex-1">{opt.label}</span>
+                    {on && <Check className="w-4 h-4 shrink-0" />}
+                  </button>
+                )
+              })}
+            </div>
+            {reminding.remindTo && (
+              <button
+                onClick={() => handleSetRemindTo(reminding, null)}
+                className="flex items-center gap-2 justify-center w-full px-4 py-2.5 text-sm text-red-500"
+              >
+                <BellOff className="w-4 h-4 shrink-0" />
+                Turn off reminder
+              </button>
+            )}
+          </div>
+        )}
+      </Dialog>
 
       {/* Rename dialog */}
       <Dialog open={renaming !== null} onClose={() => setRenaming(null)} title="Rename checklist">

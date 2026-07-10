@@ -54,6 +54,9 @@ export type GroceryListStatus = 'draft' | 'sent'
  */
 export type ItemDestination = 'home' | 'truck' | 'rv'
 
+/** Who a trip-item reminder is addressed to (§21). */
+export type RemindTarget = 'diogo' | 'alice' | 'both'
+
 /** A feedback entry is either a reported bug or a suggested improvement (§17). */
 export type FeedbackKind = 'bug' | 'improvement'
 
@@ -204,6 +207,11 @@ export interface ChecklistItem {
    * pin — a pinned item still recurs next trip.
    */
   removeOnComplete?: boolean
+  /**
+   * "Remind me" target (§21): who gets the push the day before the trip starts,
+   * at 18:00 Toronto. Cleared once the reminder has been sent.
+   */
+  remindTo?: RemindTarget
   /**
    * Legacy "bring it back" flag — superseded by `destination` (`bringBack:
    * true` reads as destination `home`). Kept only as a read fallback.

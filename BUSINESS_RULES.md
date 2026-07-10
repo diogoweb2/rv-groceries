@@ -707,6 +707,23 @@ the displayed icon is remapped Home→Truck at stops 2 and 3 (stored destination
 - **Home dashboard.** Once a trip is active (or moving), the Home trip card shows a "right
   now" line: current stop, the next/finish procedure, and its pending-check count.
 
+## 21. Item reminders ("Remind me")
+
+- **Flagging.** Any trip checklist item's `⋮` menu offers **Remind me**, which asks who the
+  reminder is for: **Diogo**, **Alice**, or **Both of us**. The choice is stored on the item;
+  re-opening the dialog shows the current choice and offers **Turn off reminder**.
+- **Trip items only.** Supermarket items have no reminder flag — they are covered by the daily
+  Supermarket digest (§15).
+- **Delivery.** A scheduled function runs at **18:00 America/Toronto** daily. For every trip
+  whose `startDate` is **tomorrow** (and which is neither `cancelled` nor `completed`), it
+  sends each flagged recipient **exactly one push** — titled `Tomorrow: <trip title>`, its body
+  listing that person's reminded item names. Tapping it opens the trip.
+- **Unchecked only.** Items already checked off are omitted from the push. A person with no
+  reminded items gets no push; a trip with no flags is silent.
+- **One-shot.** Every flagged item on that trip has its reminder cleared once the run completes
+  — including checked ones — so a reminder never fires twice and never carries into a later
+  trip. Re-flag the item to be reminded again.
+
 ---
 
 ### Glossary of checklist phases

@@ -26,7 +26,8 @@ import type {
   GroceryList, GroceryItem, UserIdentity, OrderingPrefs, ChecklistPhase,
   PersistentItem, TripStatus, PinnedChecklist, Template,
   SupermarketList, SupermarketItem, SupermarketSortMemory,
-  AppNotification, Feedback, TransitionId, Procedure, ProcedureStep, ItemDestination
+  AppNotification, Feedback, TransitionId, Procedure, ProcedureStep, ItemDestination,
+  RemindTarget
 } from '@/types'
 
 export const DEFAULT_PHASE_ORDER: ChecklistPhase[] = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
@@ -836,6 +837,23 @@ export async function setItemRemoveOnComplete(
   identity: UserIdentity,
 ) {
   await updateItem(tripId, checklistId, item.id, { removeOnComplete }, identity, item.rev)
+}
+
+// Set — or clear, with `null` — the item's day-before reminder target (§21).
+export async function setItemRemindTo(
+  tripId: string,
+  checklistId: string,
+  item: ChecklistItem,
+  remindTo: RemindTarget | null,
+  identity: UserIdentity,
+) {
+  await updateDoc(doc(db, 'trips', tripId, 'checklists', checklistId, 'items', item.id), {
+    remindTo: remindTo ?? deleteField(),
+    updatedBy: identity,
+    updatedAt: new Date().toISOString(),
+    baseRev: item.rev,
+    rev: item.rev + 1,
+  })
 }
 
 // The single free-form list for a trip under the two-list model (§20).

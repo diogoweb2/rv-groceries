@@ -143,6 +143,23 @@ export const onNotificationCreated = onDocumentCreated(
 const IDENTITIES = ["diogo", "alice"] as const;
 
 /**
+ * Today's date in Toronto as `YYYY-MM-DD`, shifted by `offsetDays`.
+ * Trip dates are stored as plain date strings, so the comparison must be made
+ * in the trip's own timezone rather than UTC.
+ * @param {number} offsetDays days to add to today
+ * @return {string} the shifted date as YYYY-MM-DD
+ */
+function torontoDate(offsetDays: number): string {
+  const now = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Toronto",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+/**
  * Pluralizes the digest's item count.
  * @param {number} n how many items were added
  * @return {string} "1 new item" / "3 new items"
@@ -258,5 +275,81 @@ export const dailySupermarketDigest = onSchedule(
         })
       )
     );
+  }
+);
+
+/**
+ * Day-before item reminders, at 18:00 Toronto (§21). For every trip starting
+ * tomorrow, gathers the unchecked items flagged "remind me" and sends each
+ * recipient exactly one push listing their items. The flag is cleared once
+ * sent, so a reminder never fires twice.
+ */
+export const dailyTripReminders = onSchedule(
+  {schedule: "0 18 * * *", timeZone: "America/Toronto"},
+  async () => {
+    const db = getFirestore();
+    const now = new Date();
+    const tomorrow = torontoDate(1);
+
+    const trips = await db
+      .collection("trips")
+      .where("startDate", "==", tomorrow)
+      .get();
+
+    for (const trip of trips.docs) {
+      const status = trip.data().status as string | undefined;
+      if (status === "cancelled" || status === "completed") continue;
+
+      // name → recipients, plus the docs to clear once the push is out.
+      const perUser: Record<string, string[]> = {diogo: [], alice: []};
+      const flagged: FirebaseFirestore.DocumentReference[] = [];
+
+      const checklists = await trip.ref.collection("checklists").get();
+      for (const checklist of checklists.docs) {
+        const items = await checklist.ref.collection("items").get();
+        for (const item of items.docs) {
+          const data = item.data();
+          const remindTo = data.remindTo as string | undefined;
+          if (!remindTo) continue;
+          flagged.push(item.ref);
+          if (data.checked === true) continue;
+          const name = (data.name as string) ?? "an item";
+          for (const to of IDENTITIES) {
+            if (remindTo === to || remindTo === "both") perUser[to].push(name);
+          }
+        }
+      }
+
+      const title = trip.data().title as string | undefined;
+      await Promise.all(
+        IDENTITIES.filter((to) => perUser[to].length > 0).map((to) =>
+          db.collection("notifications").add({
+            to,
+            from: "system",
+            title: `Tomorrow: ${title ?? "your trip"}`,
+            body: perUser[to].join(", "),
+            type: "trip-reminder",
+            url: `/trips/${trip.id}`,
+            read: false,
+            createdAt: now.toISOString(),
+          })
+        )
+      );
+
+      // Reset every flagged item — including already-checked ones, which are
+      // skipped above but must not linger and fire on a later trip.
+      if (flagged.length > 0) {
+        const batch = db.batch();
+        for (const ref of flagged) {
+          batch.update(ref, {remindTo: FieldValue.delete()});
+        }
+        await batch.commit();
+      }
+
+      logger.info(`Trip reminders for ${trip.id}`, {
+        diogo: perUser.diogo.length,
+        alice: perUser.alice.length,
+      });
+    }
   }
 );
