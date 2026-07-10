@@ -250,8 +250,9 @@ The `itemCatalog` collection is the **single global source** for item autocomple
   into the truck, §20) and never propagates back to Supermarket.
 - **What a link does propagate:** **quantity** changes and **deletion**, either way. Deleting a
   whole checklist or trip does **not** cascade to Supermarket.
-- **Quantity.** A mirrored item keeps a `+`/`-` quantity stepper on its trip row (min 1),
-  matching the Supermarket stepper (§15); adjusting it on either side updates both.
+- **Quantity.** A trip row shows quantity **read-only**, as `(3)` after the item name, and only
+  when greater than 1. There is no `+`/`-` stepper on trip rows; a mirrored item's quantity is
+  edited in Supermarket (§15) and flows through to the trip row.
 
 ## 9. Legacy generic grocery surface (retained, unused)
 
@@ -438,8 +439,8 @@ supermarket.
     **unchecked**: bought at the store and loaded into the truck are different acts. No-op if
     there's no eligible trip. Un-buying or un-flagging removes the mirrored copy from the trip
     but leaves the item in Supermarket.
-  - Once mirrored, quantity changes and deletion on either side apply to both; the trip's
-    per-stop check never propagates back (§8).
+  - Once mirrored, quantity changes and deletion on either side apply to both (quantity is only
+    editable from Supermarket); the trip's per-stop check never propagates back (§8).
 - **Autocomplete.** Adding an item suggests **supermarket items only** — catalog entries of
   category `grocery` or `general` (never `camping`) — ranked by grocery usage. New custom names
   are registered to the catalog as `grocery`.

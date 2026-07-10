@@ -6,14 +6,14 @@ import {
   setItemRemindTo,
   savePinnedChecklist, removePinnedChecklist,
   pushPinnedChecklistToTrips,
-  setChecklistItemChecked, updateChecklistItemAndPropagate,
+  setChecklistItemChecked,
 } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Progress } from '@/components/ui/progress'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Plus, Minus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin, EyeOff, Eye, Check, CircleCheck, CircleDashed, Printer, Bell, BellOff } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronUp, MoreVertical, Pencil, GripVertical, Pin, EyeOff, Eye, Check, CircleCheck, CircleDashed, Printer, Bell, BellOff } from 'lucide-react'
 import { checklistTitle } from '@/lib/checklistTitle'
 import { printLists } from '@/lib/print'
 import { destinationMeta, destinationIcon, nextDestination } from './destination'
@@ -124,13 +124,6 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
 
   async function handleDeleteItem(item: ChecklistItem) {
     await deleteChecklistItemAndPropagate(tripId, checklist, item)
-  }
-
-  async function handleChangeQty(item: ChecklistItem, delta: number) {
-    const current = Math.max(1, Number(item.qty) || 1)
-    const next = Math.max(1, current + delta)
-    if (next === current) return
-    await updateChecklistItemAndPropagate(tripId, checklist, item, { qty: String(next) }, identity)
   }
 
   async function handleTogglePin() {
@@ -276,8 +269,8 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
                 <span className={`text-base ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                   {item.name}
                 </span>
-                {item.qty && !item.linkedSupermarketItemId && (
-                  <span className="text-sm text-gray-500 ml-1">× {item.qty}</span>
+                {Math.max(1, Number(item.qty) || 1) > 1 && (
+                  <span className="text-sm text-gray-500 ml-1">({Math.max(1, Number(item.qty) || 1)})</span>
                 )}
                 {item.frozenField && (
                   <span className="ml-2 text-xs text-amber-600">⚠ conflict</span>
@@ -290,28 +283,6 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
                   </span>
                 )}
               </div>
-
-              {/* Quantity stepper — shopping items, whose qty syncs to Supermarket */}
-              {item.linkedSupermarketItemId && (
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => handleChangeQty(item, -1)}
-                    disabled={Math.max(1, Number(item.qty) || 1) <= 1}
-                    className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-600 disabled:opacity-30 active:bg-gray-100"
-                    aria-label="Decrease quantity"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <span className="w-5 text-center text-sm font-medium text-gray-700">{Math.max(1, Number(item.qty) || 1)}</span>
-                  <button
-                    onClick={() => handleChangeQty(item, 1)}
-                    className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-600 active:bg-gray-100"
-                    aria-label="Increase quantity"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
 
               {/* Final destination (§18): Home / Truck / RV — tap to cycle */}
               {(() => {
