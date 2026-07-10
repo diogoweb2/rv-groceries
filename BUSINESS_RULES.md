@@ -443,9 +443,12 @@ supermarket.
     but leaves the item in Supermarket.
   - Once mirrored, quantity changes and deletion on either side apply to both (quantity is only
     editable from Supermarket); the trip's per-stop check never propagates back (§8).
+- **"+ Add item".** A supermarket list's primary action is a full-width **"+ Add item"** row at
+  the bottom of the list (same as a trip checklist, §18), opening an add-item sheet. The sheet
+  stays open after each add so several items can be added in a row.
 - **Autocomplete.** Adding an item suggests **supermarket items only** — catalog entries of
-  category `grocery` or `general` (never `camping`) — ranked by grocery usage. New custom names
-  are registered to the catalog as `grocery`.
+  category `grocery` or `general` (never `camping`) — ranked by grocery usage, and shows nothing
+  until something is typed. New custom names are registered to the catalog as `grocery`.
 - **No pinning.** Supermarket items have no persist/pin behaviour.
 - **Drag-and-drop reordering.** Items within a list can be reordered by dragging (via a grip
   handle), same as trip checklist items.

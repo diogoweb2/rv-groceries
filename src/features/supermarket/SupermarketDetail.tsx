@@ -26,8 +26,8 @@ import {
 } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { ArrowLeft, CheckCheck, Plus, Minus, GripVertical, Trash2, MoreVertical } from 'lucide-react'
+import { AddSupermarketItemSheet } from './AddSupermarketItemSheet'
 import { RvIcon } from '@/components/RvIcon'
 import type { SupermarketItem } from '@/types'
 import { useOverflowMenu } from '@/hooks/useOverflowMenu'
@@ -222,7 +222,7 @@ export function SupermarketDetail() {
   const identity = useAppStore(s => s.identity)!
 
   const [items, setItems] = useState<SupermarketItem[]>([])
-  const [query, setQuery] = useState('')
+  const [adding, setAdding] = useState(false)
   const [completing, setCompleting] = useState(false)
 
   // Sync server items to local state (for drag-and-drop)
@@ -234,25 +234,6 @@ export function SupermarketDetail() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
-
-  // Suggest supermarket (grocery/general) catalog items only — never camping.
-  const parsed = parseCampingFlag(query)
-  const existingNames = new Set(items.map(i => i.name.toLowerCase()))
-  const seen = new Set<string>()
-  const suggestions = parsed.name
-    ? catalog
-        .filter(c => c.category === 'grocery' || c.category === 'general')
-        .filter(c => c.name.toLowerCase().includes(parsed.name.toLowerCase()))
-        .filter(c => !existingNames.has(c.name.toLowerCase()))
-        .sort((a, b) => (b.stats?.totalGrocery ?? 0) - (a.stats?.totalGrocery ?? 0))
-        .filter(c => {
-          const key = c.name.toLowerCase()
-          if (seen.has(key)) return false
-          seen.add(key)
-          return true
-        })
-        .slice(0, 6)
-    : []
 
   // Persist the given items in the learned order (§16): re-index every item
   // whose position changed and reflect it locally right away.
@@ -268,8 +249,8 @@ export function SupermarketDetail() {
     }
   }
 
-  async function handleAdd(explicitName?: string) {
-    const { name, forCamping } = parseCampingFlag((explicitName ?? query).trim())
+  async function handleAdd(raw: string) {
+    const { name, forCamping } = parseCampingFlag(raw.trim())
     if (!name || !list) return
     const match = catalog.find(c => c.name.toLowerCase() === name.toLowerCase())
     const ref = await addSupermarketItem(
@@ -279,7 +260,6 @@ export function SupermarketDetail() {
     )
     // Register new names so supermarket autocomplete learns them.
     if (!match) await ensureCatalogItem(catalog, name, 'grocery')
-    setQuery('')
     // Auto-sort the list by learned order every time an item is added (§16).
     const newItem: SupermarketItem = {
       id: ref.id, listId: list.id, catalogItemId: match?.id, name, qty: '1',
@@ -405,46 +385,6 @@ export function SupermarketDetail() {
         </div>
       </div>
 
-      {/* Add item bar */}
-      <div className="bg-white border-b border-gray-100">
-        <div className="flex gap-2 px-4 py-3">
-          <Input
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Add item…"
-            onKeyDown={e => e.key === 'Enter' && handleAdd()}
-            className="flex-1"
-          />
-          <button
-            onClick={() => handleAdd()}
-            disabled={!parsed.name}
-            className="bg-[#2f6b4f] text-white rounded-xl px-3 disabled:opacity-40"
-            aria-label="Add item"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
-        </div>
-        {parsed.forCamping && (
-          <p className="px-4 pb-2 text-xs text-[#2f6b4f] flex items-center gap-1">
-            <RvIcon className="w-4 h-4" active /> “{parsed.name}” will be flagged for camping
-
-          </p>
-        )}
-        {suggestions.length > 0 && (
-          <div className="px-4 pb-2 flex flex-wrap gap-2">
-            {suggestions.map(c => (
-              <button
-                key={c.id}
-                onClick={() => handleAdd(c.name)}
-                className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-700 text-sm hover:bg-gray-200"
-              >
-                {c.name}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* Drag-sortable items */}
       <div className="flex-1 overflow-y-auto pb-8">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -465,7 +405,25 @@ export function SupermarketDetail() {
         {items.length === 0 && (
           <p className="text-center text-gray-400 text-sm py-10">No items yet</p>
         )}
+
+        {/* Primary action, same as a trip checklist's "+ Add item" row */}
+        <button
+          onClick={() => setAdding(true)}
+          className="flex items-center gap-2 w-full bg-white border-b border-gray-100 px-4 py-3 text-sm text-[#2f6b4f] font-medium hover:bg-emerald-50 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add item
+        </button>
       </div>
+
+      {adding && (
+        <AddSupermarketItemSheet
+          storeName={storeLabel(stores, list)}
+          items={items}
+          onAdd={handleAdd}
+          onClose={() => setAdding(false)}
+        />
+      )}
     </div>
   )
 }
