@@ -1,16 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/dialog'
 import { fetchTripRemindersFor, dismissItemReminderFor } from '@/lib/firestore'
+import { localToday } from '@/lib/date'
 import { Bell } from 'lucide-react'
 import type { ChecklistItem, Trip, UserIdentity } from '@/types'
 
 type Row = { checklistId: string; item: ChecklistItem }
-
-/** Today as YYYY-MM-DD in the device's own timezone (never UTC — evenings roll over early). */
-function localToday(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
 /** Days between today and the trip's start date, in local calendar days. */
 function daysUntilStart(trip: Trip): number {

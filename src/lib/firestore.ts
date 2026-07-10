@@ -21,6 +21,7 @@ import {
   arrayRemove,
 } from 'firebase/firestore'
 import { db } from './firebase'
+import { localToday } from './date'
 import type {
   Trip, Checklist, ChecklistItem, Amenity, Store, CatalogItem,
   GroceryList, GroceryItem, UserIdentity, OrderingPrefs, ChecklistPhase,
@@ -677,7 +678,8 @@ export async function deleteTrip(id: string) {
 // Trips advance through statuses automatically by date: a trip becomes `active`
 // the day before its start date and `completed` the day after its end date (a
 // one-day buffer on each side). `cancelled` is sticky and never auto-changed.
-// All date math is done in UTC to match the `YYYY-MM-DD` comparisons used elsewhere.
+// "Today" is the device's local date (`localToday`); shifting a trip's own dates
+// by whole days is done in UTC, which is safe for bare `YYYY-MM-DD` strings.
 
 function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr + 'T00:00:00Z')
@@ -688,7 +690,7 @@ function addDays(dateStr: string, days: number): string {
 // The status a trip should have for a given day, based purely on its dates.
 export function deriveTripStatus(
   trip: Trip,
-  today = new Date().toISOString().slice(0, 10),
+  today = localToday(),
 ): TripStatus {
   if (trip.status === 'cancelled') return 'cancelled'
   if (today >= addDays(trip.endDate, 1)) return 'completed'
@@ -714,7 +716,7 @@ export async function completeTrip(trip: Trip, identity: UserIdentity) {
 // one (planned → active → completed). Never moves backward and never touches
 // `cancelled`. Idempotent — safe to call on every load. Returns nothing.
 export async function syncTripStatuses(trips: Trip[], identity: UserIdentity) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localToday()
   for (const trip of trips) {
     if (trip.status === 'cancelled') continue
     const next = deriveTripStatus(trip, today)
@@ -728,7 +730,7 @@ export async function syncTripStatuses(trips: Trip[], identity: UserIdentity) {
 // sync §8/§15) should target: the active trip if any, else the soonest
 // upcoming non-cancelled/non-completed trip.
 export function findNextOrActiveTrip(trips: Trip[]): Trip | undefined {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localToday()
   const live = trips.filter((t) => t.status !== 'cancelled' && t.status !== 'completed')
   return (
     // 1. A trip explicitly marked active.

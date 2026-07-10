@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTrips, useAmenities } from '@/hooks/useFirestore'
 import { deleteTrip, incrementRatingPrompt, rateTrip } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
+import { localToday } from '@/lib/date'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -95,7 +96,7 @@ export function TripsList() {
   }
 
   const amenityMap = Object.fromEntries(amenities.map(a => [a.id, a]))
-  const now = new Date().toISOString().slice(0, 10)
+  const now = localToday()
   const visible = filter === 'upcoming'
     ? trips.filter(t => t.startDate >= now && t.status !== 'cancelled' && t.status !== 'completed')
     : trips

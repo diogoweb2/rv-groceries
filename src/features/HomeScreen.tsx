@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/lib/store'
+import { localToday } from '@/lib/date'
 import { useTrips, useChecklists, useChecklistItems, useProcedures } from '@/hooks/useFirestore'
 import { findNextOrActiveTrip, TRIP_STOPS, STOP_PROCEDURE, PROCEDURE_LABELS } from '@/lib/firestore'
 import { Progress } from '@/components/ui/progress'
@@ -16,7 +17,7 @@ function formatDate(d: string) {
 }
 
 function countdown(trip: Trip): string {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localToday()
   if (trip.status === 'active' || (trip.startDate <= today && trip.endDate >= today)) return 'Happening now'
   const days = Math.round(
     (new Date(trip.startDate + 'T00:00:00').getTime() - new Date(today + 'T00:00:00').getTime()) / 86_400_000
