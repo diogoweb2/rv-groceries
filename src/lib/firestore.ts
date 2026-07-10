@@ -856,6 +856,39 @@ export async function setItemRemindTo(
   })
 }
 
+/** Unchecked items of a trip flagged to remind `identity` (directly or via 'both'), §21. */
+export async function fetchTripRemindersFor(
+  tripId: string,
+  identity: UserIdentity,
+): Promise<{ checklistId: string; item: ChecklistItem }[]> {
+  const lists = await getDocs(collection(db, 'trips', tripId, 'checklists'))
+  const out: { checklistId: string; item: ChecklistItem }[] = []
+  for (const cl of lists.docs) {
+    const items = await getDocs(collection(db, 'trips', tripId, 'checklists', cl.id, 'items'))
+    for (const d of items.docs) {
+      const item = docData<ChecklistItem>(d)
+      if (item.checked) continue
+      if (item.remindTo === identity || item.remindTo === 'both') out.push({ checklistId: cl.id, item })
+    }
+  }
+  return out
+}
+
+/**
+ * Opt this identity out of an item's reminder (§21). A 'both' reminder is narrowed
+ * to the other person rather than dropped, so their reminder survives.
+ */
+export async function dismissItemReminderFor(
+  tripId: string,
+  checklistId: string,
+  item: ChecklistItem,
+  identity: UserIdentity,
+) {
+  const next: RemindTarget | null =
+    item.remindTo === 'both' ? (identity === 'diogo' ? 'alice' : 'diogo') : null
+  await setItemRemindTo(tripId, checklistId, item, next, identity)
+}
+
 // The single free-form list for a trip under the two-list model (§20).
 export const OTHER_CHECKLIST_NAME = 'Other'
 

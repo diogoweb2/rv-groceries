@@ -732,6 +732,17 @@ the displayed icon is remapped Home→Truck at stops 2 and 3 (stored destination
 - **One-shot.** Every flagged item on that trip has its reminder cleared once the run completes
   — including checked ones — so a reminder never fires twice and never carries into a later
   trip. Re-flag the item to be reminded again.
+- **In-app reminder modal.** When the app is opened **1 or 2 days before** the next/active
+  trip's `startDate` (§4's trip selection), a modal on Home lists that trip's **unchecked**
+  reminded items. It is **per-identity**: only items addressed to the current identity (or to
+  **Both of us**) are shown — never the other person's reminders. It appears **at most once per
+  day** per trip and identity (remembered on the device), and not at all when the person has no
+  reminded items.
+- **"Don't remind me anymore".** The modal has a checkbox and a Close button. Closing with the
+  box ticked opts **this identity** out of every item listed: a reminder addressed only to them
+  is turned off, while a **Both of us** reminder is narrowed to the other person so that
+  person's reminder survives. Closing without ticking it (or dismissing the modal) changes
+  nothing.
 
 ---
 

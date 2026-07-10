@@ -6,6 +6,7 @@ import { findNextOrActiveTrip, TRIP_STOPS, STOP_PROCEDURE, PROCEDURE_LABELS } fr
 import { Progress } from '@/components/ui/progress'
 import { RigIcon, Campfire, Stars } from '@/components/CampScenes'
 import { Tent, Settings, Users, Plus, ChevronRight, CalendarDays, CheckCircle2, ListChecks, MapPin, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { TripReminderModal } from '@/features/trips/TripReminderModal'
 import type { Trip, Checklist } from '@/types'
 
 const PHASE_ORDER = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
@@ -179,6 +180,8 @@ export function HomeScreen() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto bg-[#fbf7f0]">
+      {focusTrip && identity && <TripReminderModal trip={focusTrip} identity={identity} />}
+
       {/* Scenic campsite header — the sky follows the real time of day */}
       <div className={`${skyClass} relative overflow-hidden`}>
         {period === 'night' ? (
