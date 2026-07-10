@@ -49,7 +49,8 @@ const STATUS_BADGE: Record<Trip['status'], { label: string; variant: 'default' |
 }
 
 function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  // 'YYYY-MM-DD' alone parses as UTC and renders a day early west of Greenwich.
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function StarIcon({ fill }: { fill: 'empty' | 'half' | 'full' }) {
