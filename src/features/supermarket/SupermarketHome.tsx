@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useSupermarketLists, useSupermarketItems, useStores } from '@/hooks/useFirestore'
 import { ensureActiveSupermarketList, storeLabel } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
+import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Plus, ShoppingCart, ChevronRight } from 'lucide-react'
 import type { SupermarketList, Store } from '@/types'
@@ -55,15 +56,11 @@ export function SupermarketHome() {
   return (
     <div className="flex flex-col min-h-0 flex-1 bg-[#fbf7f0]">
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <h1 className="text-xl font-bold text-gray-800">Supermarket</h1>
+        <h1 className="text-xl font-bold text-gray-800">🛒 Supermarket</h1>
         {canCreate && (
-          <button
-            onClick={() => setPicking(true)}
-            className="bg-[#2f6b4f] text-white rounded-xl p-2 active:opacity-80"
-            aria-label="New list"
-          >
+          <Button size="icon" onClick={() => setPicking(true)} aria-label="New list">
             <Plus className="w-5 h-5" />
-          </button>
+          </Button>
         )}
       </div>
 
