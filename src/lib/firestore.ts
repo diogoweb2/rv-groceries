@@ -876,21 +876,6 @@ export async function fetchTripRemindersFor(
   return out
 }
 
-/**
- * Opt this identity out of an item's reminder (§21). A 'both' reminder is narrowed
- * to the other person rather than dropped, so their reminder survives.
- */
-export async function dismissItemReminderFor(
-  tripId: string,
-  checklistId: string,
-  item: ChecklistItem,
-  identity: UserIdentity,
-) {
-  const next: RemindTarget | null =
-    item.remindTo === 'both' ? (identity === 'diogo' ? 'alice' : 'diogo') : null
-  await setItemRemindTo(tripId, checklistId, item, next, identity)
-}
-
 // The single free-form list for a trip under the two-list model (§20).
 export const OTHER_CHECKLIST_NAME = 'Other'
 

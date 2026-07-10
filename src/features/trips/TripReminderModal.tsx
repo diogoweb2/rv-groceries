@@ -1,11 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/dialog'
-import { fetchTripRemindersFor, dismissItemReminderFor } from '@/lib/firestore'
+import { fetchTripRemindersFor } from '@/lib/firestore'
 import { localToday } from '@/lib/date'
-import { Bell } from 'lucide-react'
 import type { ChecklistItem, Trip, UserIdentity } from '@/types'
-
-type Row = { checklistId: string; item: ChecklistItem }
 
 /** Days between today and the trip's start date, in local calendar days. */
 function daysUntilStart(trip: Trip): number {
@@ -15,56 +12,48 @@ function daysUntilStart(trip: Trip): number {
 }
 
 /**
- * §21: on opening the app 1–2 days before a trip, show that person's reminder
- * items once per day. "Don't remind me anymore" opts this identity out of them.
+ * §21: opening the app 1–2 days before a trip shows that person's reminder items.
+ * It reappears on every app open until they mute it, and muting lasts only for the
+ * current day — the next day it reminds again.
  */
 export function TripReminderModal({ trip, identity }: { trip: Trip; identity: UserIdentity }) {
-  const [rows, setRows] = useState<Row[]>([])
+  const [items, setItems] = useState<ChecklistItem[]>([])
   const [open, setOpen] = useState(false)
   const [muted, setMuted] = useState(false)
 
   const days = daysUntilStart(trip)
   const due = days === 1 || days === 2
-  const seenKey = `tripReminderSeen:${trip.id}:${identity}:${localToday()}`
+  const muteKey = `tripReminderMuted:${trip.id}:${identity}:${localToday()}`
 
   useEffect(() => {
-    if (!due || localStorage.getItem(seenKey)) return
+    if (!due || localStorage.getItem(muteKey)) return
     let cancelled = false
     fetchTripRemindersFor(trip.id, identity).then(found => {
-      // Marking "seen" only once the modal actually opens, so a cancelled effect
-      // run (StrictMode remount) doesn't swallow the reminder for the whole day.
       if (cancelled || found.length === 0) return
-      setRows(found)
+      setItems(found.map(f => f.item))
       setOpen(true)
-      localStorage.setItem(seenKey, '1')
     })
     return () => { cancelled = true }
-  }, [due, seenKey, trip.id, identity])
+  }, [due, muteKey, trip.id, identity])
 
-  async function close() {
+  function close() {
     setOpen(false)
-    if (muted) {
-      await Promise.all(rows.map(r => dismissItemReminderFor(trip.id, r.checklistId, r.item, identity)))
-    }
+    if (muted) localStorage.setItem(muteKey, '1')
   }
 
   return (
-    <Dialog open={open} onClose={close} title={days === 1 ? 'Trip starts tomorrow' : 'Trip in 2 days'}>
-      <p className="text-sm text-gray-500 mb-3">
-        Reminders for <span className="font-medium text-gray-700">{trip.title}</span>:
-      </p>
-      <ul className="flex flex-col gap-2 mb-5">
-        {rows.map(({ item }) => (
-          <li key={item.id} className="flex items-center gap-2 text-sm text-gray-800">
-            <Bell className="w-4 h-4 text-[#2f6b4f] shrink-0" />
-            <span className="truncate">{item.name}</span>
+    <Dialog open={open} onClose={close} title={days === 1 ? 'Tomorrow' : 'In 2 days'}>
+      <ul className="flex flex-col gap-3 mb-6">
+        {items.map(item => (
+          <li key={item.id} className="text-2xl font-bold text-gray-900 leading-snug">
+            {item.name}
           </li>
         ))}
       </ul>
 
-      <label className="flex items-center gap-2 text-sm text-gray-600 mb-4">
+      <label className="flex items-center gap-2 text-sm text-gray-500 mb-4">
         <input type="checkbox" checked={muted} onChange={e => setMuted(e.target.checked)} className="w-4 h-4" />
-        Don't remind me anymore
+        Don't remind me today anymore
       </label>
 
       <button onClick={close} className="w-full bg-[#2f6b4f] text-white py-3 rounded-xl font-bold">
