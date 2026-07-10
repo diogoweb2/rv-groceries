@@ -6,11 +6,16 @@ import type { ChecklistItem, Trip, UserIdentity } from '@/types'
 
 type Row = { checklistId: string; item: ChecklistItem }
 
+/** Today as YYYY-MM-DD in the device's own timezone (never UTC — evenings roll over early). */
+function localToday(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 /** Days between today and the trip's start date, in local calendar days. */
 function daysUntilStart(trip: Trip): number {
-  const today = new Date().toISOString().slice(0, 10)
   return Math.round(
-    (new Date(trip.startDate + 'T00:00:00').getTime() - new Date(today + 'T00:00:00').getTime()) / 86_400_000
+    (new Date(trip.startDate + 'T00:00:00').getTime() - new Date(localToday() + 'T00:00:00').getTime()) / 86_400_000
   )
 }
 
@@ -25,7 +30,7 @@ export function TripReminderModal({ trip, identity }: { trip: Trip; identity: Us
 
   const days = daysUntilStart(trip)
   const due = days === 1 || days === 2
-  const seenKey = `tripReminderSeen:${trip.id}:${identity}:${new Date().toISOString().slice(0, 10)}`
+  const seenKey = `tripReminderSeen:${trip.id}:${identity}:${localToday()}`
 
   useEffect(() => {
     if (!due || localStorage.getItem(seenKey)) return
