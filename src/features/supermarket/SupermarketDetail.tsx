@@ -109,8 +109,9 @@ function SortableItem({
   return (
     <div ref={setNodeRef} className={`relative border-b border-gray-50 ${menuOpen ? 'z-30' : ''}`}>
       {/* Outside the transformed row below: a `fixed` backdrop nested inside it
-          would be sized to the row, not the viewport. */}
-      {menuOpen && <div className="fixed inset-0 z-10" onClick={closeMenu} />}
+          would be sized to the row, not the viewport. It stays z-auto and first
+          in DOM order so the row — and the menu it contains — paints over it. */}
+      {menuOpen && <div className="fixed inset-0" onClick={closeMenu} />}
       {/* Delete affordance revealed as the row slides right. */}
       <div
         className={`absolute inset-y-0 left-0 flex items-center gap-2 px-4 text-white transition-colors ${
