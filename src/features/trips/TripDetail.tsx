@@ -240,6 +240,12 @@ export function TripDetail() {
     setAddingTo(checklistId)
   }
 
+  // With a single list there's nothing to pick, so go straight to its Add-item sheet.
+  function handleAddItem() {
+    if (flatChecklists.length === 1) handlePickListToAddItem(flatChecklists[0].id)
+    else setPickingList(true)
+  }
+
   function openRatingDialog() {
     setPendingRating(currentTrip.ratings?.[identity] ?? 0)
     setRatingOpen(true)
@@ -365,7 +371,7 @@ export function TripDetail() {
         </div>
         <div className="flex flex-col gap-2 px-5 pb-3">
           <button
-            onClick={() => setPickingList(true)}
+            onClick={handleAddItem}
             disabled={visibleChecklists.length === 0}
             className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl bg-[#2f6b4f] text-white text-base font-semibold shadow-sm active:scale-[0.99] transition-transform disabled:opacity-40 disabled:active:scale-100"
           >

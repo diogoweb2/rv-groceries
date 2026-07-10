@@ -140,9 +140,10 @@ The Home screen focuses on a single trip, chosen in this priority:
   name (or a Store picker for the Groceries section, §8). There is no per-section or bottom
   add button.
 - **"+ Add item" header shortcut.** Alongside "+ Add checklist" the header has a **"+ Add
-  item"** link. It opens a picker of the trip's (visible) checklists grouped by phase; choosing
-  one closes the picker, **smooth-scrolls that checklist into view**, and **opens that list's
-  Add-item sheet** (exactly as tapping the list's own "+ Add item" row would). It is disabled
+  item"** link. When the trip has exactly one visible checklist the picker is skipped and that
+  list is used directly. Otherwise it opens a picker of the trip's (visible) checklists grouped
+  by phase. Either way the target list is **smooth-scrolled into view** and its **Add-item
+  sheet opens** (exactly as tapping the list's own "+ Add item" row would). It is disabled
   when the trip has no visible checklists.
 - **Phase-section icons.** Each phase section header shows an icon beside its name: Before the
   trip (backpack), Day of departure (truck), Pack down / return (open package), Groceries
