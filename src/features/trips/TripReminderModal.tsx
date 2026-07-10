@@ -31,10 +31,12 @@ export function TripReminderModal({ trip, identity }: { trip: Trip; identity: Us
     if (!due || localStorage.getItem(seenKey)) return
     let cancelled = false
     fetchTripRemindersFor(trip.id, identity).then(found => {
+      // Marking "seen" only once the modal actually opens, so a cancelled effect
+      // run (StrictMode remount) doesn't swallow the reminder for the whole day.
       if (cancelled || found.length === 0) return
-      localStorage.setItem(seenKey, '1')
       setRows(found)
       setOpen(true)
+      localStorage.setItem(seenKey, '1')
     })
     return () => { cancelled = true }
   }, [due, seenKey, trip.id, identity])
