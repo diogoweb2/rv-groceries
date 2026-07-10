@@ -282,6 +282,13 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
                 {item.frozenField && (
                   <span className="ml-2 text-xs text-amber-600">⚠ conflict</span>
                 )}
+                {(item.persist || item.removeOnComplete || item.remindTo) && (
+                  <span className="inline-flex items-center gap-1 ml-1.5 align-middle text-gray-400 pointer-events-none">
+                    {item.persist && <Pin className="w-3 h-3 fill-current" aria-label="Pinned to next trip" />}
+                    {item.removeOnComplete && <CircleCheck className="w-3 h-3" aria-label="Removed after completion" />}
+                    {item.remindTo && <Bell className="w-3 h-3" aria-label="Reminder set" />}
+                  </span>
+                )}
               </div>
 
               {/* Quantity stepper — shopping items, whose qty syncs to Supermarket */}
