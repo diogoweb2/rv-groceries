@@ -24,6 +24,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { Trip, ChecklistPhase, Checklist } from '@/types'
+import { useOverflowMenu } from '@/hooks/useOverflowMenu'
 
 // Single-list model (§8/§20): a trip has one Other list; groceries live in
 // Supermarket and mirror into it when flagged for camping. Stop 0 renders the
@@ -120,7 +121,7 @@ export function TripDetail() {
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
-  const [menuOpen, setMenuOpen] = useState(false)
+  const { open: menuOpen, toggle: toggleMenu, close: closeMenu } = useOverflowMenu(`trip-${id}`)
   const [addingTo, setAddingTo] = useState<string | null>(null)
   const [editTrip, setEditTrip] = useState<TripEdit | null>(null)
   const [ratingOpen, setRatingOpen] = useState(false)
@@ -150,7 +151,7 @@ export function TripDetail() {
   // "Print all": every visible (non-hidden) checklist of the trip, outstanding
   // items only, in the trip's phase-section order (§19).
   async function handlePrintAll() {
-    setMenuOpen(false)
+    closeMenu()
     const data = await getTripChecklistsWithItems(currentTrip.id)
     const lists: PrintList[] = []
     for (const phase of ordering.phaseOrder) {
@@ -170,7 +171,7 @@ export function TripDetail() {
 
   async function markComplete() {
     await completeTrip(currentTrip, identity)
-    setMenuOpen(false)
+    closeMenu()
   }
 
   async function handleDelete() {
@@ -180,7 +181,7 @@ export function TripDetail() {
 
   async function setStatus(status: Trip['status']) {
     await updateTrip(id!, { status })
-    setMenuOpen(false)
+    closeMenu()
   }
 
   function handleCardDragEnd(lists: Checklist[]) {
@@ -299,12 +300,12 @@ export function TripDetail() {
           </div>
           <Badge variant={badge.variant}>{badge.label}</Badge>
           <div className="relative">
-            <button onClick={() => setMenuOpen(v => !v)} className="p-2 text-gray-500">
+            <button onClick={toggleMenu} className="p-2 text-gray-500">
               <MoreVertical className="w-5 h-5" />
             </button>
             {menuOpen && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="fixed inset-0 z-10" onClick={() => closeMenu()} />
                 <div className="absolute right-0 top-full z-20 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-40">
                   {trip.status !== 'active' && (
                     <button onClick={() => setStatus('active')} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
@@ -321,10 +322,10 @@ export function TripDetail() {
                       Mark as Planned
                     </button>
                   )}
-                  <button onClick={() => { setMenuOpen(false); openTripEditor() }} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                  <button onClick={() => { closeMenu(); openTripEditor() }} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
                     <Tag className="w-4 h-4" /> Edit trip
                   </button>
-                  <button onClick={() => { setMenuOpen(false); setBatchRemoveOpen(true) }} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                  <button onClick={() => { closeMenu(); setBatchRemoveOpen(true) }} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
                     <CircleCheck className="w-4 h-4" /> Remove after completion
                   </button>
                   <button onClick={handlePrintAll} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">

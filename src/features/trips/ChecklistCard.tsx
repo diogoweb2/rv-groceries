@@ -18,6 +18,7 @@ import { checklistTitle } from '@/lib/checklistTitle'
 import { printLists } from '@/lib/print'
 import { destinationMeta, destinationIcon, nextDestination } from './destination'
 import type { Checklist, ChecklistItem, RemindTarget } from '@/types'
+import { useOverflowMenu } from '@/hooks/useOverflowMenu'
 
 const REMIND_OPTIONS: { value: RemindTarget; label: string }[] = [
   { value: 'diogo', label: 'Diogo' },
@@ -43,7 +44,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
   const identity = useAppStore(s => s.identity)!
   const items = useChecklistItems(tripId, checklist.id)
   const [expanded, setExpanded] = useState(true)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const { open: menuOpen, toggle: toggleMenu, close: closeMenu } = useOverflowMenu(`checklist-${checklist.id}`)
   const [itemMenu, setItemMenu] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [reminding, setReminding] = useState<ChecklistItem | null>(null)
@@ -89,7 +90,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
   }, [checked, total, checklist.hidden, checklist.name, checklist.id, tripId])
 
   function handlePrint() {
-    setMenuOpen(false)
+    closeMenu()
     printLists(checklistTitle(checklist), [{
       name: checklistTitle(checklist),
       items: items.filter(i => !i.checked).map(i => printLine(i)),
@@ -97,7 +98,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
   }
 
   async function handleToggleHidden() {
-    setMenuOpen(false)
+    closeMenu()
     await updateChecklist(tripId, checklist.id, { hidden: !checklist.hidden })
   }
 
@@ -127,7 +128,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
   }
 
   async function handleTogglePin() {
-    setMenuOpen(false)
+    closeMenu()
     if (checklist.pinned) {
       await updateChecklist(tripId, checklist.id, { pinned: false })
       await removePinnedChecklist(checklist.phase, checklist.name)
@@ -150,7 +151,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
   }
 
   async function handleDeleteChecklist() {
-    setMenuOpen(false)
+    closeMenu()
     if (checklist.pinned) {
       await removePinnedChecklist(checklist.phase, checklist.name)
     }
@@ -188,12 +189,12 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
 
         {/* Checklist menu */}
         <div className="relative shrink-0 -mr-1">
-          <button onClick={() => setMenuOpen(v => !v)} className="p-1 text-gray-400 hover:text-gray-600">
+          <button onClick={toggleMenu} className="p-1 text-gray-400 hover:text-gray-600">
             <MoreVertical className="w-5 h-5" />
           </button>
           {menuOpen && (
             <>
-              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div className="fixed inset-0 z-10" onClick={() => closeMenu()} />
               <div className="absolute right-0 top-full z-20 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-36">
                 <button
                   onClick={handleTogglePin}
@@ -203,13 +204,13 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
                   {checklist.pinned ? 'Unpin from future trips' : 'Pin to future trips'}
                 </button>
                 <button
-                  onClick={() => { setMenuOpen(false); setRenaming(checklist.name) }}
+                  onClick={() => { closeMenu(); setRenaming(checklist.name) }}
                   className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
                 >
                   <Pencil className="w-4 h-4" /> Rename
                 </button>
                 <button
-                  onClick={() => { setMenuOpen(false); setShowCompleted(v => !v) }}
+                  onClick={() => { closeMenu(); setShowCompleted(v => !v) }}
                   className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
                 >
                   {showCompleted

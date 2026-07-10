@@ -30,6 +30,7 @@ import { Input } from '@/components/ui/input'
 import { ArrowLeft, CheckCheck, Plus, Minus, GripVertical, Trash2, MoreVertical } from 'lucide-react'
 import { RvIcon } from '@/components/RvIcon'
 import type { SupermarketItem } from '@/types'
+import { useOverflowMenu } from '@/hooks/useOverflowMenu'
 
 // Distance (px) the row must be swiped right before releasing deletes it.
 const SWIPE_DELETE_THRESHOLD = 96
@@ -50,7 +51,7 @@ function SortableItem({
   onRemove: (item: SupermarketItem) => void
 }) {
   const qtyNum = Math.max(1, Number(item.qty) || 1)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const { open: menuOpen, toggle: toggleMenu, close: closeMenu } = useOverflowMenu(`item-${item.id}`)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
 
   // Horizontal swipe-to-delete. Tracked separately from the vertical drag
@@ -107,6 +108,9 @@ function SortableItem({
 
   return (
     <div ref={setNodeRef} className={`relative border-b border-gray-50 ${menuOpen ? 'z-30' : ''}`}>
+      {/* Outside the transformed row below: a `fixed` backdrop nested inside it
+          would be sized to the row, not the viewport. */}
+      {menuOpen && <div className="fixed inset-0 z-10" onClick={closeMenu} />}
       {/* Delete affordance revealed as the row slides right. */}
       <div
         className={`absolute inset-y-0 left-0 flex items-center gap-2 px-4 text-white transition-colors ${
@@ -182,25 +186,22 @@ function SortableItem({
       {/* Item overflow menu */}
       <div className="relative shrink-0">
         <button
-          onClick={() => setMenuOpen(v => !v)}
+          onClick={toggleMenu}
           aria-label="Item actions"
           className="p-2.5 -m-1 text-gray-300 hover:text-gray-500"
         >
           <MoreVertical className="w-5 h-5" />
         </button>
         {menuOpen && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-            <div className="absolute right-0 top-full z-20 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-44">
-              <button
-                onClick={() => { setMenuOpen(false); onRemove(item) }}
-                className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-gray-50"
-              >
-                <Trash2 className="w-4 h-4 shrink-0" />
-                <span className="flex-1 text-left">Remove item</span>
-              </button>
-            </div>
-          </>
+          <div className="absolute right-0 top-full z-20 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-44">
+            <button
+              onClick={() => { closeMenu(); onRemove(item) }}
+              className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-gray-50"
+            >
+              <Trash2 className="w-4 h-4 shrink-0" />
+              <span className="flex-1 text-left">Remove item</span>
+            </button>
+          </div>
         )}
       </div>
       </div>
