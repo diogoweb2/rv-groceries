@@ -588,21 +588,25 @@ Lists can be printed to paper as a hand-check sheet.
 This is the primary model for the trip screen and **supersedes the four-phase model**.
 See `STAGE_FLOW_SPEC.md` for the design rationale.
 
-### The two-list model
+### The one-list model
 
-- A trip has exactly one list: **Other**, shown as **"Bring to Truck"**. The old phase
+- A trip has exactly **one** list: **Other**, shown as **"Bring to Truck"**. The old phase
   sections (Before the trip / Day of departure / Pack down / Groceries) are gone; internally
   only the `other` checklist phase is used. Groceries arrive here from Supermarket (§8).
 - **Migration.** On load, each trip's legacy `pre_early`/`pre_dayof`/`pack_down` checklists
   (including the retired auto-lists "Spmkt->Truck" and "Bringing back items") are collapsed:
   their items move into the single Other list and the emptied checklists are deleted.
   New trips are collapsed the same way after seeding, and always have an Other list.
+- **Groceries migration.** The per-store `grocery` checklists are likewise gone from the trip
+  screen: every grocery item is moved into Other with destination **Truck**, any live
+  Supermarket link is re-pointed at its new home, and the emptied grocery checklists are
+  deleted. Groceries now reach a trip only as Other items (§8).
 - **Adding.** Every item is added with the Add-item sheet's required **final destination**
   step (§18). **"+ Add item"** is the trip's primary action: a full-width button at the top of
-  the trip screen that opens the list picker. No list is ever created by hand — the Other list
-  and the per-store Groceries lists are both provisioned automatically (§8).
+  the trip screen. Because a trip has only one list, the picker is **skipped** and the sheet
+  opens straight onto Other. No list is ever created by hand.
 - **List titles are display-only.** A list's stored `name` never changes (pinned lists key off
-  it), but everywhere a list title is shown — card header, print output, add-item picker — the
+  it), but everywhere a list title is shown — card header, print output, add-item sheet — the
   Other list is rendered as **"Bring to Truck"**.
 - **No section headers at Home.** Stop 0 shows the trip's lists as one flat, reorderable
   stack of cards — there is no phase grouping or "Packing" header. Grouping by destination
@@ -751,7 +755,7 @@ the displayed icon is remapped Home→Truck at stops 2 and 3 (stored destination
 | Phase       | Label                 | Status                          |
 |-------------|-----------------------|---------------------------------|
 | `other`     | "Bring to Truck"      | active                          |
-| `grocery`   | Groceries (per store) | legacy — migrated into `other`   |
+| `grocery`   | Groceries (per store) | legacy — migrated into `other`  |
 | `pre_early` | Before the trip       | legacy — migrated into `other`  |
 | `pre_dayof` | Day of departure      | legacy — migrated into `other`  |
 | `pack_down` | Pack down / return    | legacy — migrated into `other`  |

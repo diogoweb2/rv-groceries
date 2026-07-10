@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress'
 import { RigIcon, Campfire, Stars } from '@/components/CampScenes'
 import { Tent, Settings, Users, Plus, ChevronRight, CalendarDays, CheckCircle2, ListChecks, MapPin, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { TripReminderModal } from '@/features/trips/TripReminderModal'
+import { checklistTitle } from '@/lib/checklistTitle'
 import type { Trip, Checklist } from '@/types'
 
 const PHASE_ORDER = ['pre_early', 'pre_dayof', 'pack_down', 'grocery']
@@ -70,7 +71,7 @@ function ChecklistRow({
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2 mb-1">
-          <span className="text-sm font-medium text-gray-800 truncate">{checklist.name}</span>
+          <span className="text-sm font-medium text-gray-800 truncate">{checklistTitle(checklist)}</span>
           <span className="text-xs text-gray-400 shrink-0">{checked}/{total}</span>
         </div>
         <Progress value={total ? (checked / total) * 100 : 0} className="h-1.5" />
