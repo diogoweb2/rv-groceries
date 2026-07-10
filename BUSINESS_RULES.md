@@ -461,6 +461,15 @@ supermarket.
   (camping) toggle, kept large for easy tapping. However it's deleted, removing a live-linked
   camping item also removes its trip copy (§8); deleting from the trip side still
   propagates here too.
+- **Only one "⋮" overflow menu is open at a time**, across the whole app (supermarket rows,
+  checklist cards, the trip header). Opening one closes any other; tapping outside dismisses.
+
+### Supermarket tab badge
+
+The Supermarket tab in the bottom nav shows a badge with the number of items still **left to
+buy**: unchecked items across **all active lists**, counted by **unique name** (case- and
+whitespace-insensitive), so the same item on two stores' lists counts once. Completed lists
+are excluded. The badge is hidden at zero and displays `99+` above 99.
 
 ## 16. Supermarket auto-sort (learned ordering)
 

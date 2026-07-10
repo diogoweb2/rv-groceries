@@ -104,6 +104,37 @@ export function useSupermarketItems(listId: string | undefined) {
   return data
 }
 
+/**
+ * How many distinct things are still left to buy across every active list.
+ * The same item on two stores' lists counts once, so the number matches what
+ * the shopper thinks of as "things to buy", not rows on screen.
+ */
+export function useSupermarketPendingCount() {
+  const lists = useSupermarketLists()
+  const [byList, setByList] = useState<Record<string, SupermarketItem[]>>({})
+
+  const activeIds = lists.filter(l => l.status === 'active').map(l => l.id)
+  const key = activeIds.join(',')
+
+  useEffect(() => {
+    const ids = key ? key.split(',') : []
+    const unsubs = ids.map(id =>
+      subscribeSupermarketItems(id, items => setByList(prev => ({ ...prev, [id]: items })))
+    )
+    // Drop lists that are no longer active so their items stop being counted.
+    setByList(prev => Object.fromEntries(ids.map(id => [id, prev[id] ?? []])))
+    return () => unsubs.forEach(u => u())
+  }, [key])
+
+  const names = new Set<string>()
+  for (const items of Object.values(byList)) {
+    for (const item of items) {
+      if (!item.checked) names.add(item.name.trim().toLowerCase())
+    }
+  }
+  return names.size
+}
+
 export function useSupermarketSort() {
   const [data, setData] = useState<SupermarketSortMemory>({ stores: {} })
   useEffect(() => subscribeSupermarketSort(setData), [])

@@ -411,7 +411,7 @@ export function SupermarketDetail() {
           <Input
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Add item…  (tip: Milk -> camping)"
+            placeholder="Add item…"
             onKeyDown={e => e.key === 'Enter' && handleAdd()}
             className="flex-1"
           />
