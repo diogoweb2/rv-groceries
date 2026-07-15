@@ -21,11 +21,14 @@ import { useSupermarketLists, useSupermarketItems, useCatalog, useTrips, useSupe
 import {
   addSupermarketItem, updateSupermarketItem,
   setSupermarketItemChecked, setSupermarketItemQty, setSupermarketItemForCamping,
+  setSupermarketItemName,
   completeSupermarketList, ensureCatalogItem, deleteSupermarketItemAndPropagate,
   parseCampingFlag, storeLabel, sortedByMemory, learnSupermarketOrder,
 } from '@/lib/firestore'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { ArrowLeft, CheckCheck, Plus, Minus, GripVertical, Trash2, MoreVertical } from 'lucide-react'
 import { AddSupermarketItemSheet } from './AddSupermarketItemSheet'
 import { RvIcon } from '@/components/RvIcon'
@@ -42,6 +45,7 @@ function SortableItem({
   item,
   cartRide,
   onToggle,
+  onRename,
   onToggleCamping,
   onChangeQty,
   onDelete,
@@ -51,6 +55,7 @@ function SortableItem({
   /** Play the "cart zooms across the row" bought animation. */
   cartRide: boolean
   onToggle: (item: SupermarketItem) => void
+  onRename: (item: SupermarketItem) => void
   onToggleCamping: (item: SupermarketItem) => void
   onChangeQty: (item: SupermarketItem, delta: number) => void
   onDelete: (item: SupermarketItem) => void
@@ -161,11 +166,15 @@ function SortableItem({
         )}
       </button>
 
-      <div className="flex-1 min-w-0">
+      {/* Tap the name to rename the item. */}
+      <button
+        onClick={() => onRename(item)}
+        className="flex-1 min-w-0 text-left"
+      >
         <span className={`text-base transition-colors duration-300 ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
           {item.name}
         </span>
-      </div>
+      </button>
 
       {/* Quantity stepper */}
       <div className="flex items-center gap-1 shrink-0">
@@ -238,6 +247,9 @@ export function SupermarketDetail() {
   const [items, setItems] = useState<SupermarketItem[]>([])
   const [adding, setAdding] = useState(false)
   const [completing, setCompleting] = useState(false)
+  // Item being renamed via tap-on-name, and the dialog's draft text.
+  const [renaming, setRenaming] = useState<SupermarketItem | null>(null)
+  const [renameText, setRenameText] = useState('')
   // Item currently playing the bought cart-ride animation. While an item rides,
   // `holdRef` pins it at its on-screen position so neither our own reorder
   // writes nor an incoming snapshot can move it mid-animation.
@@ -370,6 +382,22 @@ export function SupermarketDetail() {
     }
   }
 
+  function startRename(item: SupermarketItem) {
+    setRenameText(item.name)
+    setRenaming(item)
+  }
+
+  async function handleRenameSave() {
+    const target = renaming
+    const name = renameText.trim()
+    setRenaming(null)
+    if (!target || !name || name === target.name) return
+    // Reflect the rename locally right away; the write propagates it to a
+    // live-linked trip item too (§8/§15).
+    setItems(prev => prev.map(i => (i.id === target.id ? { ...i, name } : i)))
+    await setSupermarketItemName(list!, target, name, identity)
+  }
+
   // Tent icon: mark the item as destined for camping. It only reaches the trip's
   // "Bring to Truck" list once it's also bought (§8/§15).
   async function toggleCamping(item: SupermarketItem) {
@@ -445,6 +473,7 @@ export function SupermarketDetail() {
                 item={item}
                 cartRide={cartRideId === item.id}
                 onToggle={toggleBought}
+                onRename={startRename}
                 onToggleCamping={toggleCamping}
                 onChangeQty={changeQty}
                 onDelete={handleDelete}
@@ -466,6 +495,23 @@ export function SupermarketDetail() {
           Add item
         </button>
       </div>
+
+      {/* Rename dialog (tap on an item's name) */}
+      <Dialog open={renaming !== null} onClose={() => setRenaming(null)} title="Edit item">
+        <div className="flex flex-col gap-4">
+          <Input
+            value={renameText}
+            onChange={e => setRenameText(e.target.value)}
+            placeholder="Item name"
+            autoFocus
+            onKeyDown={e => e.key === 'Enter' && handleRenameSave()}
+          />
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setRenaming(null)}>Cancel</Button>
+            <Button className="flex-1" onClick={handleRenameSave} disabled={!renameText.trim()}>Save</Button>
+          </div>
+        </div>
+      </Dialog>
 
       {adding && (
         <AddSupermarketItemSheet

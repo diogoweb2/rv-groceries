@@ -1853,6 +1853,26 @@ export async function setSupermarketItemQty(
   )
 }
 
+// Rename a supermarket item and, when it's live-linked to a trip item,
+// propagate the new name there too (§8/§15).
+export async function setSupermarketItemName(
+  list: SupermarketList,
+  item: SupermarketItem,
+  name: string,
+  identity: UserIdentity,
+) {
+  await updateSupermarketItem(list.id, item.id, { name }, identity, item.rev)
+  if (!item.linkedTripId || !item.linkedChecklistId || !item.linkedItemId) return
+  const tripItemSnap = await getDoc(
+    doc(db, 'trips', item.linkedTripId, 'checklists', item.linkedChecklistId, 'items', item.linkedItemId)
+  )
+  if (!tripItemSnap.exists()) return
+  await updateItem(
+    item.linkedTripId, item.linkedChecklistId, item.linkedItemId,
+    { name }, identity, (tripItemSnap.data().rev as number) ?? 0,
+  )
+}
+
 // Mirror a bought, camping-flagged supermarket item into the next/active trip's
 // "Bring to Truck" (Other) list with the Truck destination, adopting a same-name
 // item there if one already exists. No-op if there's no next/active trip. The

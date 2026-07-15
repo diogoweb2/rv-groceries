@@ -443,6 +443,8 @@ supermarket.
     but leaves the item in Supermarket.
   - Once mirrored, quantity changes and deletion on either side apply to both (quantity is only
     editable from Supermarket); the trip's per-stop check never propagates back (§8).
+- **Tap the name to rename.** Tapping a supermarket item's name opens an edit dialog to rename
+  it. When the item is live-linked to a trip item, the new name propagates there too.
 - **"+ Add item".** A supermarket list's primary action is a full-width **"+ Add item"** row at
   the bottom of the list (same as a trip checklist, §18), opening an add-item sheet. The sheet
   stays open after each add so several items can be added in a row.
