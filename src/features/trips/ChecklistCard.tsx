@@ -35,12 +35,14 @@ function printLine(item: ChecklistItem): string {
 interface Props {
   checklist: Checklist
   tripId: string
+  /** The trip's current stop, from the live trip subscription (§20). */
+  currentStop: number
   onAddItem: () => void
   /** Drag handle attributes/listeners from the sortable wrapper. */
   dragHandleProps?: React.HTMLAttributes<HTMLElement>
 }
 
-export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }: Props) {
+export function ChecklistCard({ checklist, tripId, currentStop, onAddItem, dragHandleProps }: Props) {
   const identity = useAppStore(s => s.identity)!
   const items = useChecklistItems(tripId, checklist.id)
   const [expanded, setExpanded] = useState(true)
@@ -50,15 +52,23 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
   const [reminding, setReminding] = useState<ChecklistItem | null>(null)
   const [showCompleted, setShowCompleted] = useState(true)
 
-  const checked = items.filter(i => i.checked).length
+  // Optimistic check state: a tap flips the row instantly (before Firestore
+  // confirms) and holds the row in place briefly so the check animation plays
+  // where the user tapped, instead of the row jumping away mid-tap.
+  const [held, setHeld] = useState<Record<string, boolean>>({})
+  const isChecked = (item: ChecklistItem) => item.id in held ? held[item.id] : item.checked
+  // While held, sort/filter by the pre-toggle state so the row stays put.
+  const sortChecked = (item: ChecklistItem) => item.id in held ? !held[item.id] : item.checked
+
+  const checked = items.filter(isChecked).length
   const total = items.length
   const progress = total ? (checked / total) * 100 : 0
 
   // Completed items are auto-hidden within the card unless "Show completed" is on;
   // when shown, they sink to the bottom.
   const visibleItems = showCompleted
-    ? [...items].sort((a, b) => Number(a.checked) - Number(b.checked))
-    : items.filter(i => !i.checked)
+    ? [...items].sort((a, b) => Number(sortChecked(a)) - Number(sortChecked(b)))
+    : items.filter(i => !sortChecked(i))
 
   // When this checklist is pinned, keep the global snapshot in sync with any
   // item changes (add, delete, toggle). Skip the first render where items is
@@ -102,8 +112,16 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
     await updateChecklist(tripId, checklist.id, { hidden: !checklist.hidden })
   }
 
-  async function handleToggle(item: ChecklistItem) {
-    await setChecklistItemChecked(tripId, checklist, item, !item.checked, identity)
+  function handleToggle(item: ChecklistItem) {
+    const next = !isChecked(item)
+    setHeld(h => ({ ...h, [item.id]: next }))
+    window.setTimeout(() => {
+      setHeld(h => {
+        const { [item.id]: _, ...rest } = h
+        return rest
+      })
+    }, 900)
+    void setChecklistItemChecked(tripId, checklist, item, next, identity, currentStop)
   }
 
   async function handleTogglePersist(item: ChecklistItem) {
@@ -247,18 +265,18 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
           {visibleItems.map(item => (
             <div
               key={item.id}
-              className={`flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 ${item.checked ? 'bg-green-50/50' : ''}`}
+              className={`flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 transition-colors duration-300 ${isChecked(item) ? 'bg-green-50/50' : ''}`}
             >
               {/* Checkbox */}
               <button
                 onClick={() => handleToggle(item)}
                 className={`w-6 h-6 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${
-                  item.checked
-                    ? 'bg-green-500 border-green-500 text-white'
+                  isChecked(item)
+                    ? 'bg-green-500 border-green-500 text-white animate-check-pop'
                     : 'border-gray-300'
                 }`}
               >
-                {item.checked && (
+                {isChecked(item) && (
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
@@ -267,7 +285,7 @@ export function ChecklistCard({ checklist, tripId, onAddItem, dragHandleProps }:
 
               {/* Name */}
               <div className="flex-1 min-w-0">
-                <span className={`text-base ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                <span className={`text-base transition-colors duration-300 ${isChecked(item) ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                   {item.name}
                 </span>
                 {Math.max(1, Number(item.qty) || 1) > 1 && (

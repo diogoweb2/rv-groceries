@@ -81,9 +81,10 @@ function StarRating({ value, onChange }: { value: number; onChange: (v: number) 
 
 // A draggable phase section (the whole group, with its header handle).
 // A draggable checklist card.
-function SortableChecklist({ checklist, tripId, onAddItem }: {
+function SortableChecklist({ checklist, tripId, currentStop, onAddItem }: {
   checklist: Checklist
   tripId: string
+  currentStop: number
   onAddItem: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: checklist.id })
@@ -98,6 +99,7 @@ function SortableChecklist({ checklist, tripId, onAddItem }: {
       <ChecklistCard
         checklist={checklist}
         tripId={tripId}
+        currentStop={currentStop}
         onAddItem={onAddItem}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
@@ -431,6 +433,7 @@ export function TripDetail() {
                       key={cl.id}
                       checklist={cl}
                       tripId={id!}
+                      currentStop={stop}
                       onAddItem={() => setAddingTo(cl.id)}
                     />
                   ))}
