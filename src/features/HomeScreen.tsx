@@ -221,6 +221,13 @@ export function HomeScreen() {
             </button>
           </div>
         </div>
+
+        {/* Build stamp — quick way to confirm the installed PWA is current. */}
+        <p className="text-center text-[11px] text-gray-400">
+          Released version: {new Date(__BUILD_DATE__).toLocaleString('en-GB', {
+            day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+          })}
+        </p>
       </div>
     </div>
   )

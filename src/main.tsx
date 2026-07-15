@@ -33,10 +33,14 @@ if ('serviceWorker' in navigator) {
   // run on open. Explicitly check whenever the app comes to the foreground;
   // if a new version is found, autoUpdate activates it and the
   // controllerchange handler above reloads onto it. No-op offline.
-  document.addEventListener('visibilitychange', () => {
+  const checkForUpdate = () => {
     if (document.visibilityState !== 'visible' || !navigator.onLine) return
     navigator.serviceWorker.getRegistration().then((reg) => reg?.update().catch(() => {}))
-  })
+  }
+  document.addEventListener('visibilitychange', checkForUpdate)
+  // Also poll while the app sits open in the foreground (e.g. left on a
+  // counter mid-shop), so a fresh deploy reaches it without an app switch.
+  setInterval(checkForUpdate, 5 * 60 * 1000)
 }
 
 createRoot(document.getElementById('root')!).render(

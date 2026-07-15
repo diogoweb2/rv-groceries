@@ -5,6 +5,10 @@ import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 
 export default defineConfig({
+  // Stamped at build time; shown on the home screen as the released version.
+  define: {
+    __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     react(),
     tailwindcss(),
