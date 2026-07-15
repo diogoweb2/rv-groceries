@@ -35,8 +35,12 @@ import { useOverflowMenu } from '@/hooks/useOverflowMenu'
 // Distance (px) the row must be swiped right before releasing deletes it.
 const SWIPE_DELETE_THRESHOLD = 96
 
+// How long the bought-item shopping-cart ride runs before the row sinks.
+const CART_RIDE_MS = 900
+
 function SortableItem({
   item,
+  cartRide,
   onToggle,
   onToggleCamping,
   onChangeQty,
@@ -44,6 +48,8 @@ function SortableItem({
   onRemove,
 }: {
   item: SupermarketItem
+  /** Play the "cart zooms across the row" bought animation. */
+  cartRide: boolean
   onToggle: (item: SupermarketItem) => void
   onToggleCamping: (item: SupermarketItem) => void
   onChangeQty: (item: SupermarketItem, delta: number) => void
@@ -129,6 +135,14 @@ function SortableItem({
         style={{ ...rowStyle, touchAction: 'pan-y' }}
         className={`relative flex items-center gap-3 bg-white px-4 py-3.5 transition-opacity duration-300 ${item.checked ? 'opacity-60' : ''}`}
       >
+      {/* Bought celebration: a shopping cart races across the row (§8 UX). */}
+      {cartRide && (
+        <div className="pointer-events-none absolute inset-y-0 z-10 flex items-center animate-cart-ride">
+          <span className="inline-block text-3xl animate-cart-rattle drop-shadow-md">🛒</span>
+          <span className="cart-speed-lines" aria-hidden />
+        </div>
+      )}
+
       <button {...attributes} {...listeners} className="text-gray-300 touch-none">
         <GripVertical className="w-5 h-5" />
       </button>
@@ -224,9 +238,32 @@ export function SupermarketDetail() {
   const [items, setItems] = useState<SupermarketItem[]>([])
   const [adding, setAdding] = useState(false)
   const [completing, setCompleting] = useState(false)
+  // Item currently playing the bought cart-ride animation. While an item rides,
+  // `holdRef` pins it at its on-screen position so neither our own reorder
+  // writes nor an incoming snapshot can move it mid-animation.
+  const [cartRideId, setCartRideId] = useState<string | null>(null)
+  const holdRef = useRef<Map<string, number>>(new Map())
 
-  // Sync server items to local state (for drag-and-drop)
-  useEffect(() => { setItems(rawItems) }, [rawItems])
+  // Sync server items to local state (for drag-and-drop), keeping any
+  // mid-animation item at the position it currently occupies on screen.
+  useEffect(() => {
+    setItems(prev => {
+      const holds = holdRef.current
+      const now = Date.now()
+      for (const [hid, expires] of holds) if (expires < now) holds.delete(hid)
+      if (holds.size === 0) return rawItems
+      const next = [...rawItems]
+      for (const hid of holds.keys()) {
+        const prevIdx = prev.findIndex(i => i.id === hid)
+        const newIdx = next.findIndex(i => i.id === hid)
+        if (prevIdx >= 0 && newIdx >= 0 && prevIdx !== newIdx) {
+          const [moved] = next.splice(newIdx, 1)
+          next.splice(Math.min(prevIdx, next.length), 0, moved)
+        }
+      }
+      return next
+    })
+  }, [rawItems])
 
   const list = lists.find(l => l.id === id)
 
@@ -302,19 +339,23 @@ export function SupermarketDetail() {
 
   async function toggleBought(item: SupermarketItem) {
     const nowChecked = !item.checked
-    // Flip the check locally right away so the pop animation plays where the
-    // user tapped; a newly bought row sinks to the bottom a beat later.
+    // Flip the check locally right away so the feedback plays where the user
+    // tapped; a newly bought row sinks to the bottom only after the cart ride.
     setItems(prev => prev.map(i => (i.id === item.id ? { ...i, checked: nowChecked } : i)))
     if (nowChecked) {
-      // Move the item to the end of the list once bought.
+      // Pin the row in place and run the cart across it, then sink it.
+      holdRef.current.set(item.id, Date.now() + CART_RIDE_MS + 300)
+      setCartRideId(item.id)
       const oldIndex = items.findIndex(i => i.id === item.id)
       const reordered = arrayMove(items, oldIndex, items.length - 1)
       window.setTimeout(() => {
+        setCartRideId(cur => (cur === item.id ? null : cur))
+        holdRef.current.delete(item.id)
         setItems(prev => {
           const idx = prev.findIndex(i => i.id === item.id)
           return idx < 0 ? prev : arrayMove(prev, idx, prev.length - 1)
         })
-      }, 600)
+      }, CART_RIDE_MS)
       // Write the check first so the earliest snapshot already carries it (the
       // sibling order updates can trickle in after). A camping-flagged item
       // joins the trip's Bring to Truck list here (§8).
@@ -402,6 +443,7 @@ export function SupermarketDetail() {
               <SortableItem
                 key={item.id}
                 item={item}
+                cartRide={cartRideId === item.id}
                 onToggle={toggleBought}
                 onToggleCamping={toggleCamping}
                 onChangeQty={changeQty}

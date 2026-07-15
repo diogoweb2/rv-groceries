@@ -106,6 +106,34 @@
   .animate-tab-pop {
     animation: tab-pop 0.35s ease-out;
   }
+  /* Supermarket "bought" celebration: cart races left→right across the row,
+     rattling as it goes, with speed lines trailing behind. Duration must match
+     CART_RIDE_MS in SupermarketDetail.tsx. */
+  @keyframes cart-ride {
+    0% { left: -3.5rem; }
+    100% { left: calc(100% + 1rem); }
+  }
+  .animate-cart-ride {
+    animation: cart-ride 0.9s cubic-bezier(0.5, 0, 0.75, 1) forwards;
+  }
+  @keyframes cart-rattle {
+    0%, 100% { transform: translateY(0) rotate(-6deg); }
+    50% { transform: translateY(-4px) rotate(6deg); }
+  }
+  .animate-cart-rattle {
+    animation: cart-rattle 0.16s linear infinite;
+  }
+  .cart-speed-lines {
+    order: -1;
+    width: 2.5rem;
+    height: 1rem;
+    margin-right: 0.3rem;
+    opacity: 0.6;
+    background:
+      linear-gradient(to right, transparent, #9ca3af) right top / 100% 2px no-repeat,
+      linear-gradient(to right, transparent, #9ca3af) right center / 65% 2px no-repeat,
+      linear-gradient(to right, transparent, #9ca3af) right bottom / 85% 2px no-repeat;
+  }
   @keyframes check-pop {
     0% { transform: scale(0.5); }
     60% { transform: scale(1.25); }
@@ -115,7 +143,7 @@
     animation: check-pop 0.3s ease-out;
   }
   @media (prefers-reduced-motion: reduce) {
-    .animate-rv-bob, .animate-campfire, .animate-twinkle, .animate-drift, .animate-tab-pop, .animate-check-pop {
+    .animate-rv-bob, .animate-campfire, .animate-twinkle, .animate-drift, .animate-tab-pop, .animate-check-pop, .animate-cart-ride, .animate-cart-rattle {
       animation: none;
     }
   }
