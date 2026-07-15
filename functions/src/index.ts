@@ -160,6 +160,20 @@ function torontoDate(offsetDays: number): string {
 }
 
 /**
+ * The America/Toronto calendar date (YYYY-MM-DD) of an ISO timestamp.
+ * @param {string} iso an ISO timestamp
+ * @return {string} the Toronto date as YYYY-MM-DD
+ */
+function torontoDateOf(iso: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Toronto",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}
+
+/**
  * Pluralizes the digest's item count.
  * @param {number} n how many items were added
  * @return {string} "1 new item" / "3 new items"
@@ -225,7 +239,11 @@ export const dailySupermarketDigest = onSchedule(
     const touched: DigestEntry[] = [];
     for (const list of listsSnap.docs) {
       const items = await list.ref.collection("items").get();
-      const added = items.docs.filter((d) => {
+      // Bought items aren't news — the digest tells the shopper what's newly on
+      // the list still to buy, and the total is what's left in the basket, not
+      // the checked-off history (§15).
+      const unbought = items.docs.filter((d) => !d.data().checked);
+      const added = unbought.filter((d) => {
         const createdAt = d.data().createdAt as string | undefined;
         return createdAt !== undefined && createdAt > since;
       }).length;
@@ -235,7 +253,7 @@ export const dailySupermarketDigest = onSchedule(
         listId: list.id,
         store: await storeNameFor(db, list),
         added,
-        total: items.size,
+        total: unbought.length,
       });
     }
 
@@ -254,7 +272,7 @@ export const dailySupermarketDigest = onSchedule(
     const title = touched.map((t) => t.store).join(" + ");
     const added = touched.reduce((n, t) => n + t.added, 0);
     const total = touched.reduce((n, t) => n + t.total, 0);
-    const body = `${plural(added)} added (total: ${total})`;
+    const body = `${plural(added)}, ${total} in total`;
     // Tapping the push opens the one store's list, or the tab when several.
     const url = one ? `/supermarket/${one.listId}` : "/supermarket";
     logger.info(`Supermarket digest: ${touched.length} store(s)`, {
@@ -275,6 +293,63 @@ export const dailySupermarketDigest = onSchedule(
         })
       )
     );
+  }
+);
+
+/**
+ * Prunes bought items the morning after they were checked (§15). A checked item
+ * is only useful while the shopper is at the store; the next day it's clutter,
+ * so once its `checkedAt` falls on an earlier Toronto date it is deleted.
+ *
+ * Items bought before this shipped have no `checkedAt` — they are treated as
+ * already stale and removed too. A camping item that was mirrored into a trip
+ * (§8) keeps its trip copy: only the Supermarket row is deleted and the trip
+ * item's live link is cleared.
+ */
+export const dailySupermarketCleanup = onSchedule(
+  {schedule: "0 4 * * *", timeZone: "America/Toronto"},
+  async () => {
+    const db = getFirestore();
+    const today = torontoDate(0);
+
+    const listsSnap = await db
+      .collection("supermarketLists")
+      .where("status", "==", "active")
+      .get();
+
+    let removed = 0;
+    for (const list of listsSnap.docs) {
+      const items = await list.ref.collection("items").get();
+      for (const item of items.docs) {
+        const data = item.data();
+        if (!data.checked) continue;
+        const checkedAt = data.checkedAt as string | undefined;
+        // Keep items checked today; remove anything checked earlier (or with
+        // no timestamp, i.e. bought before this feature shipped).
+        if (checkedAt !== undefined && torontoDateOf(checkedAt) >= today) {
+          continue;
+        }
+
+        const tripId = data.linkedTripId as string | undefined;
+        const checklistId = data.linkedChecklistId as string | undefined;
+        const itemId = data.linkedItemId as string | undefined;
+        if (tripId && checklistId && itemId) {
+          // The bought camping item already rode into the truck — keep the trip
+          // copy, just sever its now-dangling link to this row.
+          await db
+            .doc(`trips/${tripId}/checklists/${checklistId}/items/${itemId}`)
+            .update({
+              linkedSupermarketListId: FieldValue.delete(),
+              linkedSupermarketItemId: FieldValue.delete(),
+            })
+            .catch(() => undefined);
+        }
+        await item.ref.delete();
+        removed++;
+      }
+    }
+
+    logger.info(`Supermarket cleanup: removed ${removed} bought item(s)`);
   }
 );
 

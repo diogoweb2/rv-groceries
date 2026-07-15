@@ -305,6 +305,11 @@ export interface SupermarketItem {
   forCamping?: boolean
   /** Whether the shopper has bought this item. */
   checked: boolean
+  /**
+   * When the item was checked off as bought. Feeds the daily cleanup (§15),
+   * which removes bought items the next Toronto day. Cleared when un-bought.
+   */
+  checkedAt?: string
   order: number
   /** The linked trip-side item, when `forCamping` is set (§8). */
   linkedTripId?: string

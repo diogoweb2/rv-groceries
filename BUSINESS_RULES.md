@@ -418,12 +418,16 @@ supermarket.
 - **Daily "items added" digest.** Once a day at **18:00 America/Toronto**, a scheduled Cloud
   Function (`dailySupermarketDigest`) sends **both** people one notification summarising the
   items added to active Supermarket lists since the previous run — never one push per item.
-  - **Silent when nothing was added.** No new items since the last run ⇒ no notification.
+  - **Bought items are ignored.** Both counts consider only items **still to buy** (unchecked):
+    "new" is newly-added *unbought* items, and "total" is what's left in the basket — checked-off
+    items never inflate either number.
+  - **Silent when nothing new was added.** No new unbought items since the last run ⇒ no
+    notification (adding nothing, or a day where every addition was already bought, stays silent).
   - The **title** names the stores touched, joined with `+`; the **body** sums the additions
-    and list sizes **across all of them**:
-    - One store: title *"NoFrills/FreshCo"*, body *"1 new item added (total: 4)"*.
-    - Two stores: title *"NoFrills/FreshCo + Costco"*, body *"2 new items added (total: 7)"* —
-      2 added between them, 7 items across both lists.
+    and remaining (unbought) list sizes **across all of them**:
+    - One store: title *"NoFrills/FreshCo"*, body *"1 new item, 4 in total"*.
+    - Two stores: title *"NoFrills/FreshCo + Costco"*, body *"2 new items, 7 in total"* —
+      2 added between them, 7 still to buy across both lists.
   - The store name comes from the live `stores` record, falling back to the name denormalized
     on the list (same preference as list display, §15).
   - **Tapping it** opens that store's list when only one store was touched, otherwise the
@@ -431,6 +435,14 @@ supermarket.
   - "New" is judged by the item's `createdAt` against the last run's timestamp, so items that
     predate this feature (they have no `createdAt`) are never reported. The run timestamp
     advances even on silent days, so nothing is ever reported twice.
+- **Bought items are cleared the next day.** A checked (bought) item is only useful while
+  shopping; a scheduled Cloud Function (`dailySupermarketCleanup`, **04:00 America/Toronto**)
+  deletes every bought item whose check-off falls on an **earlier** Toronto date, leaving only
+  items bought **today** (and all unbought items) on the list. Items bought before this shipped
+  (no `checkedAt`) count as stale and are removed too. Un-buying an item clears its `checkedAt`
+  so it is no longer a removal candidate. If the removed item was a camping item mirrored into a
+  trip (§8), the **trip copy is kept** — it already rode into the truck — and only the trip
+  item's live link back to the (now-deleted) Supermarket row is cleared.
 - **Camping items (live-linked with the trip's Bring-to-Truck list, §8).** Any item can be
   flagged **for camping**, either by a per-item tent toggle or by the shorthand
   **`<name> -> camping`** (also `→ camping`) when adding — the suffix is stripped and the item

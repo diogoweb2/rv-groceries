@@ -1808,7 +1808,14 @@ export async function setSupermarketItemChecked(
   trips: Trip[],
   extra?: Partial<SupermarketItem>,
 ) {
-  await updateSupermarketItem(list.id, item.id, { checked, ...extra }, identity, item.rev)
+  // Stamp when it was bought so the daily cleanup can drop it the next day (§15);
+  // clear the stamp when un-bought so it's no longer a removal candidate.
+  const checkedAt = checked ? new Date().toISOString() : deleteField()
+  await updateSupermarketItem(
+    list.id, item.id,
+    { checked, checkedAt, ...extra } as Partial<SupermarketItem>,
+    identity, item.rev,
+  )
   if (!item.forCamping) return
   if (checked) await linkSupermarketItemToTrip(list, { ...item, checked }, trips, identity)
   else await unlinkSupermarketItemFromTrip({ ...item, checked }, identity, true)
