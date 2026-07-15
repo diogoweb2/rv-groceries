@@ -127,7 +127,7 @@ function SortableItem({
         onPointerUp={onPointerEnd}
         onPointerCancel={onPointerEnd}
         style={{ ...rowStyle, touchAction: 'pan-y' }}
-        className={`relative flex items-center gap-3 bg-white px-4 py-3.5 ${item.checked ? 'opacity-60' : ''}`}
+        className={`relative flex items-center gap-3 bg-white px-4 py-3.5 transition-opacity duration-300 ${item.checked ? 'opacity-60' : ''}`}
       >
       <button {...attributes} {...listeners} className="text-gray-300 touch-none">
         <GripVertical className="w-5 h-5" />
@@ -136,7 +136,7 @@ function SortableItem({
       <button
         onClick={() => onToggle(item)}
         className={`w-6 h-6 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${
-          item.checked ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300'
+          item.checked ? 'bg-green-500 border-green-500 text-white animate-check-pop' : 'border-gray-300'
         }`}
         aria-label={item.checked ? 'Mark not bought' : 'Mark bought'}
       >
@@ -148,7 +148,7 @@ function SortableItem({
       </button>
 
       <div className="flex-1 min-w-0">
-        <span className={`text-base ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+        <span className={`text-base transition-colors duration-300 ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
           {item.name}
         </span>
       </div>
@@ -302,20 +302,29 @@ export function SupermarketDetail() {
 
   async function toggleBought(item: SupermarketItem) {
     const nowChecked = !item.checked
+    // Flip the check locally right away so the pop animation plays where the
+    // user tapped; a newly bought row sinks to the bottom a beat later.
+    setItems(prev => prev.map(i => (i.id === item.id ? { ...i, checked: nowChecked } : i)))
     if (nowChecked) {
       // Move the item to the end of the list once bought.
       const oldIndex = items.findIndex(i => i.id === item.id)
       const reordered = arrayMove(items, oldIndex, items.length - 1)
-      setItems(reordered)
+      window.setTimeout(() => {
+        setItems(prev => {
+          const idx = prev.findIndex(i => i.id === item.id)
+          return idx < 0 ? prev : arrayMove(prev, idx, prev.length - 1)
+        })
+      }, 600)
+      // Write the check first so the earliest snapshot already carries it (the
+      // sibling order updates can trickle in after). A camping-flagged item
+      // joins the trip's Bring to Truck list here (§8).
+      await setSupermarketItemChecked(list!, item, true, identity, trips, { order: reordered.length - 1 })
       for (let i = 0; i < reordered.length; i++) {
         const it = reordered[i]
         if (it.id === item.id || it.order === i) continue
         await updateSupermarketItem(list!.id, it.id, { order: i }, identity, it.rev)
       }
-      // A camping-flagged item joins the trip's Bring to Truck list here (§8).
-      await setSupermarketItemChecked(list!, item, true, identity, trips, { order: reordered.length - 1 })
     } else {
-      setItems(items.map(i => (i.id === item.id ? { ...i, checked: false } : i)))
       await setSupermarketItemChecked(list!, item, false, identity, trips)
     }
   }
