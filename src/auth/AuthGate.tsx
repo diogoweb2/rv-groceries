@@ -130,8 +130,29 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   // one). Also start showing foreground pushes.
   useEffect(() => {
     if (!isAuthenticated || !identity) return
-    registerPushToken(identity, false, setFcmToken)
     listenForegroundMessages()
+
+    // Permission already decided (granted/denied) or unsupported → register
+    // silently; the OS won't re-show its dialog once denied anyway.
+    if (typeof Notification === 'undefined' || Notification.permission !== 'default') {
+      registerPushToken(identity, false, setFcmToken)
+      return
+    }
+
+    // Undecided → ask again. iOS PWAs only allow requestPermission() from a user
+    // gesture, so defer to the first tap/key of this session rather than
+    // prompting on bare load (which iOS silently ignores).
+    const ask = () => {
+      cleanup()
+      registerPushToken(identity, true, setFcmToken)
+    }
+    const cleanup = () => {
+      window.removeEventListener('pointerdown', ask)
+      window.removeEventListener('keydown', ask)
+    }
+    window.addEventListener('pointerdown', ask, { once: true })
+    window.addEventListener('keydown', ask, { once: true })
+    return cleanup
   }, [isAuthenticated, identity, setFcmToken])
 
   async function submitPin(value: string) {

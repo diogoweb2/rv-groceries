@@ -37,6 +37,11 @@ per-store shopping lists for Diogo; items flagged for camping there flow into th
 ## 2. Notifications
 
 - After choosing an identity, the app requests notification permission (where supported).
+- **Re-prompt on later opens.** For an already-onboarded device whose permission is still
+  **undecided** (`default`), the app asks again on the next open — deferred to the first
+  tap/keypress of the session, since iOS PWAs only allow the request from a user gesture. Once
+  permission is `granted` or `denied` it never re-prompts (a denied permission can only be
+  re-enabled from the OS/browser settings); those devices just re-register their token silently.
 - If granted, an FCM token is obtained, held in app state, **and persisted** to the
   `fcmTokens` collection mapped to the current identity (re-registering or switching identity
   on a device overwrites that device's mapping cleanly).
