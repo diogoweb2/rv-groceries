@@ -440,6 +440,28 @@ supermarket.
   - "New" is judged by the item's `createdAt` against the last run's timestamp, so items that
     predate this feature (they have no `createdAt`) are never reported. The run timestamp
     advances even on silent days, so nothing is ever reported twice.
+- **Smart Price flyer deals can be pushed in.** The separate **Smart Price** app (Firebase
+  project `spmkt-cc6fd`) has a ➕ button on each of its deal rows that calls this project's
+  `addFromSmartPrice` HTTPS Cloud Function with `{ storeName, itemName, priceLabel,
+  validUntil }`.
+  - **Auth:** the caller sends its own Firebase **ID token**, which the function verifies
+    against Google's `securetoken` certificates **for the Smart Price project**
+    (signature + issuer + audience + expiry) — no shared secret exists in either client
+    bundle. CORS is additionally restricted to the Smart Price origins.
+  - **Store matching** is by normalized name (lowercased, non-alphanumerics stripped), so
+    Smart Price's "No Frills" lands on "NoFrills". An unknown store is **created** in the
+    shared Stores list; the store's active list is reused or created (same
+    one-active-list-per-store rule as above, `createdBy: diogo`).
+  - **No duplicates:** if the list already has an **unchecked** same-name item, its deal
+    fields are refreshed in place instead of adding a second row.
+  - Pushed items carry `sourceApp: 'smartprice'`, a preformatted `priceLabel`
+    (e.g. "$6.70 / lb") and `validUntil` (ISO, end of the flyer's last valid day), and render
+    that deal line under the item name. They otherwise behave as normal items
+    (`updatedBy: diogo`), and count toward the 18:00 digest via `createdAt`.
+  - **Expired deals disappear automatically:** the UI hides an unbought, non-camping item
+    whose `validUntil` has passed, and `dailySupermarketCleanup` (04:00) deletes it. Bought
+    or camping-flagged items are exempt — they're wanted regardless of the lapsed deal —
+    and follow the normal rules below.
 - **Bought items are cleared the next day.** A checked (bought) item is only useful while
   shopping; a scheduled Cloud Function (`dailySupermarketCleanup`, **04:00 America/Toronto**)
   deletes every bought item whose check-off falls on an **earlier** Toronto date, leaving only

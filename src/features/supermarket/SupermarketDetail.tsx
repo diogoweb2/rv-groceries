@@ -174,6 +174,15 @@ function SortableItem({
         <span className={`text-base transition-colors duration-300 ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
           {item.name}
         </span>
+        {/* Flyer deal pushed in from Smart Price: show its price and how long
+            it holds (§15). Expired items are hidden/cleaned automatically. */}
+        {item.sourceApp === 'smartprice' && (item.priceLabel || item.validUntil) && (
+          <span className="block text-xs text-emerald-700">
+            {item.priceLabel}
+            {item.priceLabel && item.validUntil ? ' · ' : ''}
+            {item.validUntil ? `valid until ${new Date(item.validUntil).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}
+          </span>
+        )}
       </button>
 
       {/* Quantity stepper */}
@@ -237,7 +246,11 @@ export function SupermarketDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const lists = useSupermarketLists()
-  const rawItems = useSupermarketItems(id)
+  // Hide expired Smart Price deals right away (the 4am cleanup deletes them
+  // for real). Bought or camping-flagged ones stay — they're wanted anyway.
+  const rawItems = useSupermarketItems(id).filter(
+    i => !(i.validUntil && Date.parse(i.validUntil) < Date.now() && !i.checked && !i.forCamping)
+  )
   const catalog = useCatalog()
   const trips = useTrips()
   const stores = useStores()

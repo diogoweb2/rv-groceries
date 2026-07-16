@@ -9,7 +9,8 @@
 import {setGlobalOptions, logger} from "firebase-functions";
 import {onDocumentCreated} from "firebase-functions/v2/firestore";
 import {onSchedule} from "firebase-functions/v2/scheduler";
-import {onCall, HttpsError} from "firebase-functions/v2/https";
+import {onCall, HttpsError, onRequest} from "firebase-functions/v2/https";
+import {createVerify} from "node:crypto";
 import {defineSecret} from "firebase-functions/params";
 import {initializeApp} from "firebase-admin/app";
 import {getFirestore, FieldValue} from "firebase-admin/firestore";
@@ -322,6 +323,20 @@ export const dailySupermarketCleanup = onSchedule(
       const items = await list.ref.collection("items").get();
       for (const item of items.docs) {
         const data = item.data();
+        // Smart Price flyer deals lapse: once `validUntil` passes, the deal
+        // price no longer holds, so the unbought item leaves the list
+        // automatically. Bought or camping-flagged (trip-linked) items are
+        // left to the regular rules below — the person clearly wants those
+        // regardless of the deal.
+        const validUntil = data.validUntil as string | undefined;
+        if (
+          validUntil && Date.parse(validUntil) < Date.now() &&
+          !data.checked && !data.forCamping
+        ) {
+          await item.ref.delete();
+          removed++;
+          continue;
+        }
         if (!data.checked) continue;
         const checkedAt = data.checkedAt as string | undefined;
         // Keep items checked today; remove anything checked earlier (or with
@@ -428,3 +443,223 @@ export const dailyTripReminders = onSchedule(
     }
   }
 );
+
+// ── Smart Price integration (§15) ───────────────────────────────────────────
+// The Smart Price app (Firebase project spmkt-cc6fd) can push a flyer deal
+// onto the matching store's Supermarket list. The caller authenticates with
+// its own Firebase ID token, which we verify against Google's securetoken
+// certs for THAT project — no shared secret ships in any client bundle. CORS
+// is additionally restricted to the Smart Price origins.
+
+const SMARTPRICE_PROJECT = "spmkt-cc6fd";
+const SMARTPRICE_ORIGINS = new Set([
+  "https://spmkt-cc6fd.web.app",
+  "https://spmkt-cc6fd.firebaseapp.com",
+  "http://localhost:5180",
+  "http://localhost:5181",
+]);
+const SECURETOKEN_CERTS_URL =
+  "https://www.googleapis.com/robot/v1/metadata/x509/" +
+  "securetoken@system.gserviceaccount.com";
+
+let secureTokenCerts: {certs: Record<string, string>; expires: number} | null =
+  null;
+
+/**
+ * Fetches (and caches per the response's max-age) Google's securetoken
+ * signing certificates, keyed by `kid`.
+ * @return {Promise<Record<string, string>>} kid → x509 certificate PEM
+ */
+async function getSecureTokenCerts(): Promise<Record<string, string>> {
+  if (secureTokenCerts && Date.now() < secureTokenCerts.expires) {
+    return secureTokenCerts.certs;
+  }
+  const res = await fetch(SECURETOKEN_CERTS_URL);
+  if (!res.ok) throw new Error(`cert fetch failed: HTTP ${res.status}`);
+  const certs = (await res.json()) as Record<string, string>;
+  const maxAge = /max-age=(\d+)/.exec(res.headers.get("cache-control") ?? "");
+  const ttlMs = maxAge ? Number(maxAge[1]) * 1000 : 60 * 60 * 1000;
+  secureTokenCerts = {certs, expires: Date.now() + ttlMs};
+  return certs;
+}
+
+/**
+ * Decodes one base64url JWT segment as JSON.
+ * @param {string} part the JWT segment
+ * @return {Record<string, unknown>} the decoded object
+ */
+function jwtPart(part: string): Record<string, unknown> {
+  return JSON.parse(Buffer.from(part, "base64url").toString("utf8"));
+}
+
+/**
+ * Verifies a Firebase ID token issued by the Smart Price project
+ * (signature via Google's securetoken certs, then iss/aud/exp claims).
+ * Throws on any failure.
+ * @param {string} idToken the raw JWT from the Authorization header
+ * @return {Promise<Record<string, unknown>>} the verified token payload
+ */
+async function verifySmartPriceToken(
+  idToken: string,
+): Promise<Record<string, unknown>> {
+  const [h, p, sig] = idToken.split(".");
+  if (!h || !p || !sig) throw new Error("malformed token");
+  const header = jwtPart(h);
+  if (header.alg !== "RS256") throw new Error("unexpected alg");
+  const certs = await getSecureTokenCerts();
+  const pem = certs[header.kid as string];
+  if (!pem) throw new Error("unknown signing key");
+  const verifier = createVerify("RSA-SHA256");
+  verifier.update(`${h}.${p}`);
+  if (!verifier.verify(pem, Buffer.from(sig, "base64url"))) {
+    throw new Error("bad signature");
+  }
+  const payload = jwtPart(p);
+  if (payload.aud !== SMARTPRICE_PROJECT) throw new Error("wrong audience");
+  if (payload.iss !== `https://securetoken.google.com/${SMARTPRICE_PROJECT}`) {
+    throw new Error("wrong issuer");
+  }
+  if (((payload.exp as number) ?? 0) * 1000 < Date.now()) {
+    throw new Error("token expired");
+  }
+  return payload;
+}
+
+/**
+ * Normalizes a store name for matching across the two apps
+ * ("No Frills" ↔ "NoFrills").
+ * @param {string} name the display name
+ * @return {string} lowercased alphanumeric key
+ */
+function storeKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * POST { storeName, itemName, priceLabel?, validUntil? } — adds a Smart Price
+ * flyer deal to the store's active Supermarket list (creating the store and/or
+ * list when missing). An unchecked same-name item is updated in place instead
+ * of duplicated. `validUntil` is epoch ms (end of the deal's last valid day);
+ * expired items are hidden by the client and deleted by the daily cleanup.
+ */
+export const addFromSmartPrice = onRequest(async (req, res) => {
+  const origin = (req.headers.origin as string | undefined) ?? "";
+  if (SMARTPRICE_ORIGINS.has(origin)) {
+    res.set("Access-Control-Allow-Origin", origin);
+    res.set("Vary", "Origin");
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    res.set("Access-Control-Max-Age", "3600");
+  }
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return;
+  }
+  if (req.method !== "POST") {
+    res.status(405).json({error: "POST only"});
+    return;
+  }
+
+  const authz = (req.headers.authorization as string | undefined) ?? "";
+  const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
+  try {
+    await verifySmartPriceToken(token);
+  } catch (e) {
+    logger.warn("addFromSmartPrice: rejected token", e);
+    res.status(401).json({error: "unauthorized"});
+    return;
+  }
+
+  const {storeName, itemName, priceLabel, validUntil} = req.body ?? {};
+  if (typeof storeName !== "string" || !storeName.trim() ||
+      typeof itemName !== "string" || !itemName.trim()) {
+    res.status(400).json({error: "storeName and itemName are required"});
+    return;
+  }
+
+  const db = getFirestore();
+
+  // Match the store by normalized name; create it if Smart Price knows a
+  // store this app doesn't yet.
+  const storesSnap = await db.collection("stores").get();
+  const match = storesSnap.docs.find(
+    (d) => storeKey((d.data().name as string) ?? "") === storeKey(storeName),
+  );
+  let storeId: string;
+  let storeDisplayName: string;
+  if (match) {
+    storeId = match.id;
+    storeDisplayName = (match.data().name as string) ?? storeName.trim();
+  } else {
+    const ref = await db.collection("stores").add({name: storeName.trim()});
+    storeId = ref.id;
+    storeDisplayName = storeName.trim();
+    logger.info(`addFromSmartPrice: created store "${storeDisplayName}"`);
+  }
+
+  // Reuse the store's active list or start one (§15: one active list/store).
+  const listsSnap = await db
+    .collection("supermarketLists")
+    .where("storeId", "==", storeId)
+    .where("status", "==", "active")
+    .get();
+  let listId: string;
+  if (!listsSnap.empty) {
+    listId = listsSnap.docs[0].id;
+  } else {
+    const ref = await db.collection("supermarketLists").add({
+      storeId,
+      storeName: storeDisplayName,
+      status: "active",
+      createdBy: "diogo",
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    listId = ref.id;
+  }
+
+  const nowIso = new Date().toISOString();
+  const validUntilIso = typeof validUntil === "number" ?
+    new Date(validUntil).toISOString() :
+    null;
+  const deal: Record<string, unknown> = {
+    sourceApp: "smartprice",
+    priceLabel: typeof priceLabel === "string" ? priceLabel : null,
+    validUntil: validUntilIso,
+  };
+
+  const itemsSnap = await db
+    .collection(`supermarketLists/${listId}/items`)
+    .get();
+  const nameKey = itemName.trim().toLowerCase();
+  const existing = itemsSnap.docs.find((d) =>
+    ((d.data().name as string) ?? "").trim().toLowerCase() === nameKey &&
+    d.data().checked !== true);
+
+  if (existing) {
+    // Same deal sent again (or a fresher week's price): refresh in place.
+    await existing.ref.update({
+      ...deal,
+      updatedBy: "diogo",
+      updatedAt: nowIso,
+      rev: FieldValue.increment(1),
+    });
+    res.json({ok: true, status: "updated", store: storeDisplayName});
+    return;
+  }
+
+  const maxOrder = itemsSnap.docs.reduce(
+    (m, d) => Math.max(m, (d.data().order as number) ?? 0), -1);
+  await db.collection(`supermarketLists/${listId}/items`).add({
+    name: itemName.trim(),
+    qty: "1",
+    checked: false,
+    order: maxOrder + 1,
+    ...deal,
+    rev: 1,
+    baseRev: 0,
+    updatedBy: "diogo",
+    updatedAt: nowIso,
+    createdAt: nowIso,
+  });
+  res.json({ok: true, status: "added", store: storeDisplayName});
+});

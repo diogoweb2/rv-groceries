@@ -325,6 +325,16 @@ export interface SupermarketItem {
    * the digest shipped — those are never counted as new.
    */
   createdAt?: string
+  /** Set to 'smartprice' on items pushed in from the Smart Price app (§15). */
+  sourceApp?: string
+  /** Smart Price deal price, preformatted for display (e.g. "$6.70 / lb"). */
+  priceLabel?: string | null
+  /**
+   * ISO timestamp of the flyer deal's expiry (end of its last valid day).
+   * Expired unbought items are hidden by the UI and deleted by the daily
+   * cleanup (§15).
+   */
+  validUntil?: string | null
 }
 
 /**
