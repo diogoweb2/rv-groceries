@@ -19,7 +19,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { useSupermarketLists, useSupermarketItems, useCatalog, useTrips, useSupermarketSort, useStores } from '@/hooks/useFirestore'
 import {
-  addSupermarketItem, updateSupermarketItem,
+  addSupermarketItem, updateSupermarketItem, addAnywhereSupermarketItem,
   setSupermarketItemChecked, setSupermarketItemQty, setSupermarketItemForCamping,
   setSupermarketItemName,
   completeSupermarketList, ensureCatalogItem, deleteSupermarketItemAndPropagate,
@@ -29,7 +29,7 @@ import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { ArrowLeft, CheckCheck, Plus, Minus, GripVertical, Trash2, MoreVertical } from 'lucide-react'
+import { ArrowLeft, CheckCheck, Plus, Minus, GripVertical, Trash2, MoreVertical, Globe } from 'lucide-react'
 import { AddSupermarketItemSheet } from './AddSupermarketItemSheet'
 import { RvIcon } from '@/components/RvIcon'
 import type { SupermarketItem } from '@/types'
@@ -171,8 +171,9 @@ function SortableItem({
         onClick={() => onRename(item)}
         className="flex-1 min-w-0 text-left"
       >
-        <span className={`text-base transition-colors duration-300 ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+        <span className={`text-base transition-colors duration-300 inline-flex items-center gap-1.5 ${item.checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
           {item.name}
+          {item.anywhereId && <Globe className="w-3.5 h-3.5 text-[#2f6b4f] shrink-0" aria-label="On all stores" />}
         </span>
         {/* Flyer deal pushed in from Smart Price: show its price and how long
             it holds (§15). Expired items are hidden/cleaned automatically. */}
@@ -311,10 +312,16 @@ export function SupermarketDetail() {
     }
   }
 
-  async function handleAdd(raw: string) {
+  async function handleAdd(raw: string, anywhere: boolean) {
     const { name, forCamping } = parseCampingFlag(raw.trim())
     if (!name || !list) return
     const match = catalog.find(c => c.name.toLowerCase() === name.toLowerCase())
+    // "Anywhere" items land on every active list at once and stay synced (§15).
+    if (anywhere) {
+      if (!match) await ensureCatalogItem(catalog, name, 'grocery')
+      await addAnywhereSupermarketItem(lists, { name, catalogItemId: match?.id, forCamping }, identity)
+      return
+    }
     const ref = await addSupermarketItem(
       list.id,
       { catalogItemId: match?.id, name, qty: '1', checked: false, order: items.length },

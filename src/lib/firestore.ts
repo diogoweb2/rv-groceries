@@ -1639,13 +1639,128 @@ async function createSupermarketListDoc(storeId: string, identity: UserIdentity)
   // `stores` join (see storeLabel). Reads from the offline cache when needed.
   const storeSnap = await getDoc(doc(db, 'stores', storeId))
   const storeName = (storeSnap.data()?.name as string | undefined)?.trim()
-  return addDoc(collection(db, 'supermarketLists'), clean({
+  const ref = await addDoc(collection(db, 'supermarketLists'), clean({
     storeId,
     storeName,
     status: 'active' as const,
     createdBy: identity,
     createdAt: serverTimestamp(),
   }))
+  // Seed the fresh list with the current "anywhere" items so it stays in sync
+  // with the rest (§15).
+  await seedAnywhereItemsIntoList(ref.id, identity)
+  return ref
+}
+
+// "Anywhere" items (§15) are the same shopping entry mirrored across every
+// active store list. Collect one representative per anywhere group from the
+// other active lists, so a newly-created list can be seeded with them.
+async function collectAnywhereItems(): Promise<Map<string, SupermarketItem>> {
+  const listsSnap = await getDocs(
+    query(collection(db, 'supermarketLists'), where('status', '==', 'active'))
+  )
+  const byGroup = new Map<string, SupermarketItem>()
+  for (const l of listsSnap.docs) {
+    const itemsSnap = await getDocs(collection(db, 'supermarketLists', l.id, 'items'))
+    itemsSnap.docs.forEach((d) => {
+      const it = docData<SupermarketItem>(d)
+      if (it.anywhereId && !byGroup.has(it.anywhereId)) byGroup.set(it.anywhereId, it)
+    })
+  }
+  return byGroup
+}
+
+// Seed a list with a copy of every existing anywhere item it doesn't already
+// have (matched by anywhereId).
+async function seedAnywhereItemsIntoList(listId: string, identity: UserIdentity) {
+  const groups = await collectAnywhereItems()
+  if (groups.size === 0) return
+  const existingSnap = await getDocs(collection(db, 'supermarketLists', listId, 'items'))
+  const existingGroups = new Set(
+    existingSnap.docs.map((d) => d.data().anywhereId as string | undefined).filter(Boolean)
+  )
+  let order = existingSnap.size
+  for (const [anywhereId, src] of groups) {
+    if (existingGroups.has(anywhereId)) continue
+    await addSupermarketItem(
+      listId,
+      clean({
+        catalogItemId: src.catalogItemId,
+        name: src.name,
+        qty: src.qty ?? '1',
+        checked: false,
+        order: order++,
+        anywhereId,
+        forCamping: src.forCamping || undefined,
+      }) as Omit<SupermarketItem, 'id' | 'listId' | 'rev' | 'baseRev' | 'updatedBy' | 'updatedAt' | 'createdAt'>,
+      identity,
+    )
+  }
+}
+
+// Add a new "anywhere" item to every active list at once (§15): they share a
+// generated anywhereId so future mutations sync across all copies. A list that
+// already has a same-name item adopts it into the group instead of duplicating.
+export async function addAnywhereSupermarketItem(
+  lists: SupermarketList[],
+  data: { name: string; catalogItemId?: string; forCamping?: boolean },
+  identity: UserIdentity,
+) {
+  const anywhereId =
+    (typeof crypto !== 'undefined' && crypto.randomUUID?.()) || `${Date.now()}-${Math.random()}`
+  const active = lists.filter((l) => l.status === 'active')
+  for (const l of active) {
+    const itemsSnap = await getDocs(collection(db, 'supermarketLists', l.id, 'items'))
+    const dup = itemsSnap.docs.find(
+      (d) => ((d.data().name as string) ?? '').trim().toLowerCase() === data.name.toLowerCase()
+    )
+    if (dup) {
+      await updateSupermarketItem(
+        l.id, dup.id,
+        clean({ anywhereId, forCamping: data.forCamping || undefined }) as Partial<SupermarketItem>,
+        identity, (dup.data().rev as number) ?? 0,
+      )
+      continue
+    }
+    await addSupermarketItem(
+      l.id,
+      clean({
+        catalogItemId: data.catalogItemId,
+        name: data.name,
+        qty: '1',
+        checked: false,
+        order: itemsSnap.size,
+        anywhereId,
+        forCamping: data.forCamping || undefined,
+      }) as Omit<SupermarketItem, 'id' | 'listId' | 'rev' | 'baseRev' | 'updatedBy' | 'updatedAt' | 'createdAt'>,
+      identity,
+    )
+  }
+}
+
+// Push a field patch to every *other* active-list copy of an anywhere item
+// (§15). Raw field sync only — trip linking (§8) is handled once, for the copy
+// the user actually acted on, by the caller.
+async function propagateAnywhere(
+  item: SupermarketItem,
+  patch: Partial<SupermarketItem> | Record<string, unknown>,
+  identity: UserIdentity,
+) {
+  if (!item.anywhereId) return
+  const listsSnap = await getDocs(
+    query(collection(db, 'supermarketLists'), where('status', '==', 'active'))
+  )
+  for (const l of listsSnap.docs) {
+    const sibs = await getDocs(
+      query(collection(db, 'supermarketLists', l.id, 'items'), where('anywhereId', '==', item.anywhereId))
+    )
+    for (const s of sibs.docs) {
+      if (s.id === item.id) continue
+      await updateSupermarketItem(
+        l.id, s.id, patch as Partial<SupermarketItem>, identity, (s.data().rev as number) ?? 0,
+      )
+    }
+  }
 }
 
 // Find the store's current active list, or start a new one. This is the only
@@ -1794,6 +1909,26 @@ export async function deleteSupermarketItemAndPropagate(item: SupermarketItem) {
     await deleteDoc(doc(db, 'trips', item.linkedTripId, 'checklists', item.linkedChecklistId, 'items', item.linkedItemId))
   }
   await deleteSupermarketItem(item.listId, item.id)
+  // An anywhere item's deletion removes its copies from every other list too,
+  // along with any trip copy each was linked to (§15/§8).
+  if (item.anywhereId) {
+    const listsSnap = await getDocs(
+      query(collection(db, 'supermarketLists'), where('status', '==', 'active'))
+    )
+    for (const l of listsSnap.docs) {
+      const sibs = await getDocs(
+        query(collection(db, 'supermarketLists', l.id, 'items'), where('anywhereId', '==', item.anywhereId))
+      )
+      for (const s of sibs.docs) {
+        if (s.id === item.id) continue
+        const data = docData<SupermarketItem>(s)
+        if (data.linkedTripId && data.linkedChecklistId && data.linkedItemId) {
+          await deleteDoc(doc(db, 'trips', data.linkedTripId, 'checklists', data.linkedChecklistId, 'items', data.linkedItemId))
+        }
+        await deleteSupermarketItem(l.id, s.id)
+      }
+    }
+  }
 }
 
 // Mark a supermarket item bought/unbought. A camping-flagged item enters the
@@ -1816,6 +1951,8 @@ export async function setSupermarketItemChecked(
     { checked, checkedAt, ...extra } as Partial<SupermarketItem>,
     identity, item.rev,
   )
+  // An anywhere item's bought state syncs to its copies on every other list (§15).
+  await propagateAnywhere(item, { checked, checkedAt } as Partial<SupermarketItem>, identity)
   if (!item.forCamping) return
   if (checked) await linkSupermarketItemToTrip(list, { ...item, checked }, trips, identity)
   else await unlinkSupermarketItemFromTrip({ ...item, checked }, identity, true)
@@ -1838,6 +1975,8 @@ export async function setSupermarketItemForCamping(
   } else {
     await updateSupermarketItem(list.id, item.id, { forCamping: true }, identity, item.rev)
   }
+  // Sync the camping flag across an anywhere item's other-list copies (§15).
+  await propagateAnywhere(item, { forCamping }, identity)
 }
 
 // Adjust a supermarket item's quantity and, when it's live-linked to a trip
@@ -1849,6 +1988,8 @@ export async function setSupermarketItemQty(
   identity: UserIdentity,
 ) {
   await updateSupermarketItem(list.id, item.id, { qty }, identity, item.rev)
+  // Sync quantity across an anywhere item's other-list copies (§15).
+  await propagateAnywhere(item, { qty }, identity)
   if (!item.linkedTripId || !item.linkedChecklistId || !item.linkedItemId) return
   const tripItemSnap = await getDoc(
     doc(db, 'trips', item.linkedTripId, 'checklists', item.linkedChecklistId, 'items', item.linkedItemId)
@@ -1869,6 +2010,8 @@ export async function setSupermarketItemName(
   identity: UserIdentity,
 ) {
   await updateSupermarketItem(list.id, item.id, { name }, identity, item.rev)
+  // Sync the rename across an anywhere item's other-list copies (§15).
+  await propagateAnywhere(item, { name }, identity)
   if (!item.linkedTripId || !item.linkedChecklistId || !item.linkedItemId) return
   const tripItemSnap = await getDoc(
     doc(db, 'trips', item.linkedTripId, 'checklists', item.linkedChecklistId, 'items', item.linkedItemId)

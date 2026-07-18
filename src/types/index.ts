@@ -311,6 +311,13 @@ export interface SupermarketItem {
    */
   checkedAt?: string
   order: number
+  /**
+   * When set, this item is an "anywhere" item — the same shopping entry mirrored
+   * across every active store list (§15). All copies share this id; buying,
+   * renaming, re-qty'ing, camping-flagging or deleting any copy syncs to the rest,
+   * and new lists are seeded with a copy.
+   */
+  anywhereId?: string
   /** The linked trip-side item, when `forCamping` is set (§8). */
   linkedTripId?: string
   linkedChecklistId?: string

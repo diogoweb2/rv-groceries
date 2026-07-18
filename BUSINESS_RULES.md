@@ -482,6 +482,18 @@ supermarket.
     but leaves the item in Supermarket.
   - Once mirrored, quantity changes and deletion on either side apply to both (quantity is only
     editable from Supermarket); the trip's per-stop check never propagates back (§8).
+- **"Anywhere" items (one entry, mirrored across every store).** The Add-item sheet has an
+  **"Add to all stores"** toggle. With it on, the item is created on **every active store list**
+  at once (a list that already has a same-name item adopts it into the group rather than
+  duplicating). All copies share a generated `anywhereId` and stay in sync: **buying/un-buying,
+  renaming, changing quantity, toggling the camping flag, and deleting** any one copy applies to
+  **all** of them. A newly-created list is **seeded** with the current anywhere items, so "all
+  stores" keeps meaning all stores as stores come and go.
+  - Anywhere rows show a small **globe** icon after the name.
+  - Trip mirroring (§8) is still driven by the copy the user actually acts on — an
+    anywhere+camping item entering a trip once it's bought — not once per store copy; the raw
+    bought/flag fields sync to the other copies without each re-linking to the trip.
+  - The tab badge counts by unique name, so an anywhere item still counts once across stores.
 - **Tap the name to rename.** Tapping a supermarket item's name opens an edit dialog to rename
   it. When the item is live-linked to a trip item, the new name propagates there too.
 - **"+ Add item".** A supermarket list's primary action is a full-width **"+ Add item"** row at

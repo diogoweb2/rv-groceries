@@ -3,14 +3,14 @@ import { useCatalog } from '@/hooks/useFirestore'
 import { parseCampingFlag } from '@/lib/firestore'
 import { Sheet } from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
-import { Search, Plus } from 'lucide-react'
+import { Search, Plus, Globe } from 'lucide-react'
 import { RvIcon } from '@/components/RvIcon'
 import type { SupermarketItem } from '@/types'
 
 interface Props {
   storeName: string
   items: SupermarketItem[]
-  onAdd: (name: string) => Promise<void>
+  onAdd: (name: string, anywhere: boolean) => Promise<void>
   onClose: () => void
 }
 
@@ -21,6 +21,8 @@ export function AddSupermarketItemSheet({ storeName, items, onAdd, onClose }: Pr
   const catalog = useCatalog()
   const [query, setQuery] = useState('')
   const [saving, setSaving] = useState(false)
+  // When on, each item is added to every active store list at once (§15).
+  const [anywhere, setAnywhere] = useState(false)
 
   const parsed = parseCampingFlag(query)
   const existingNames = new Set(items.map(i => i.name.toLowerCase()))
@@ -51,7 +53,7 @@ export function AddSupermarketItemSheet({ storeName, items, onAdd, onClose }: Pr
   async function add(name: string) {
     if (!name.trim() || saving) return
     setSaving(true)
-    await onAdd(name)
+    await onAdd(name, anywhere)
     setSaving(false)
     setQuery('')
   }
@@ -75,6 +77,20 @@ export function AddSupermarketItemSheet({ storeName, items, onAdd, onClose }: Pr
             <RvIcon className="w-4 h-4" active /> “{parsed.name}” will be flagged for camping
           </p>
         )}
+        {/* Add to every active store list at once, and keep them synced (§15). */}
+        <button
+          type="button"
+          onClick={() => setAnywhere(a => !a)}
+          className={`mt-3 flex items-center gap-2 w-full rounded-xl border px-3 py-2.5 text-sm transition-colors ${
+            anywhere ? 'border-[#2f6b4f] bg-emerald-50 text-[#2f6b4f]' : 'border-gray-200 text-gray-600'
+          }`}
+        >
+          <Globe className="w-4 h-4 shrink-0" />
+          <span className="flex-1 text-left font-medium">Add to all stores</span>
+          <span className={`w-9 h-5 rounded-full relative transition-colors ${anywhere ? 'bg-[#2f6b4f]' : 'bg-gray-300'}`}>
+            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${anywhere ? 'translate-x-4' : ''}`} />
+          </span>
+        </button>
       </div>
 
       <div className="flex flex-col">
