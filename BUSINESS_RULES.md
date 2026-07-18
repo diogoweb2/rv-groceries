@@ -486,9 +486,13 @@ supermarket.
   **"Add to all stores"** toggle. With it on, the item is created on **every active store list**
   at once (a list that already has a same-name item adopts it into the group rather than
   duplicating). All copies share a generated `anywhereId` and stay in sync: **buying/un-buying,
-  renaming, changing quantity, toggling the camping flag, and deleting** any one copy applies to
+  renaming, changing quantity, and toggling the camping flag** on any one copy applies to
   **all** of them. A newly-created list is **seeded** with the current anywhere items, so "all
   stores" keeps meaning all stores as stores come and go.
+  - **Delete is per-store, on purpose.** Removing an anywhere item (swipe or "Remove item")
+    deletes it from **only that store's list** — the manual way to say "not at this store" —
+    leaving its copies on the other lists, which keep syncing among themselves. There is no
+    "delete from everywhere"; drop it from each store you don't want it on.
   - Anywhere rows show a small **globe** icon after the name.
   - Trip mirroring (§8) is still driven by the copy the user actually acts on — an
     anywhere+camping item entering a trip once it's bought — not once per store copy; the raw

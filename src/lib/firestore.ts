@@ -1908,27 +1908,10 @@ export async function deleteSupermarketItemAndPropagate(item: SupermarketItem) {
   if (item.linkedTripId && item.linkedChecklistId && item.linkedItemId) {
     await deleteDoc(doc(db, 'trips', item.linkedTripId, 'checklists', item.linkedChecklistId, 'items', item.linkedItemId))
   }
+  // An anywhere item (§15) is deleted from *only this store* — the manual way to
+  // drop it from a single list while it stays on the others. Its sibling copies
+  // are left untouched (buy/rename/qty/camping still sync among the survivors).
   await deleteSupermarketItem(item.listId, item.id)
-  // An anywhere item's deletion removes its copies from every other list too,
-  // along with any trip copy each was linked to (§15/§8).
-  if (item.anywhereId) {
-    const listsSnap = await getDocs(
-      query(collection(db, 'supermarketLists'), where('status', '==', 'active'))
-    )
-    for (const l of listsSnap.docs) {
-      const sibs = await getDocs(
-        query(collection(db, 'supermarketLists', l.id, 'items'), where('anywhereId', '==', item.anywhereId))
-      )
-      for (const s of sibs.docs) {
-        if (s.id === item.id) continue
-        const data = docData<SupermarketItem>(s)
-        if (data.linkedTripId && data.linkedChecklistId && data.linkedItemId) {
-          await deleteDoc(doc(db, 'trips', data.linkedTripId, 'checklists', data.linkedChecklistId, 'items', data.linkedItemId))
-        }
-        await deleteSupermarketItem(l.id, s.id)
-      }
-    }
-  }
 }
 
 // Mark a supermarket item bought/unbought. A camping-flagged item enters the

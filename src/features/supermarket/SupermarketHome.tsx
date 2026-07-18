@@ -69,7 +69,7 @@ export function SupermarketHome() {
           onClick={() => navigate('/manage/stores')}
           className="text-sm font-medium text-[#2f6b4f] active:opacity-70"
         >
-          Edit/Add Stores
+          Edit Stores
         </button>
       </div>
 
