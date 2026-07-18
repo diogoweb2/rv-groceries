@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   DndContext,
@@ -249,8 +249,15 @@ export function SupermarketDetail() {
   const lists = useSupermarketLists()
   // Hide expired Smart Price deals right away (the 4am cleanup deletes them
   // for real). Bought or camping-flagged ones stay — they're wanted anyway.
-  const rawItems = useSupermarketItems(id).filter(
-    i => !(i.validUntil && Date.parse(i.validUntil) < Date.now() && !i.checked && !i.forCamping)
+  // Memoized so the reference is stable between renders — the items sync effect
+  // depends on it, and a fresh array every render would loop it (setState →
+  // render → new array → effect → setState …).
+  const allItems = useSupermarketItems(id)
+  const rawItems = useMemo(
+    () => allItems.filter(
+      i => !(i.validUntil && Date.parse(i.validUntil) < Date.now() && !i.checked && !i.forCamping)
+    ),
+    [allItems],
   )
   const catalog = useCatalog()
   const trips = useTrips()
