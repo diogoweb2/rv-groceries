@@ -247,18 +247,15 @@ export function SupermarketDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const lists = useSupermarketLists()
-  // Hide Smart Price deal items entirely — they're pushed in by the other app
-  // and don't belong in the manual shopping list or its bought count (§15).
-  // Also hide expired deals right away (the 4am cleanup deletes them for real);
-  // bought or camping-flagged ones stay — they're wanted anyway.
+  // Hide expired Smart Price deals right away (the 4am cleanup deletes them
+  // for real). Bought or camping-flagged ones stay — they're wanted anyway.
   // Memoized so the reference is stable between renders — the items sync effect
   // depends on it, and a fresh array every render would loop it (setState →
   // render → new array → effect → setState …).
   const allItems = useSupermarketItems(id)
   const rawItems = useMemo(
     () => allItems.filter(
-      i => i.sourceApp !== 'smartprice' &&
-        !(i.validUntil && Date.parse(i.validUntil) < Date.now() && !i.checked && !i.forCamping)
+      i => !(i.validUntil && Date.parse(i.validUntil) < Date.now() && !i.checked && !i.forCamping)
     ),
     [allItems],
   )
