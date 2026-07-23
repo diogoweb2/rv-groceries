@@ -1904,7 +1904,10 @@ export async function deleteSupermarketItem(listId: string, itemId: string) {
 
 // Delete a supermarket item and, when it's live-linked to a trip grocery item
 // (§8/§15), delete that one too — they're the same shopping-list entry.
-export async function deleteSupermarketItemAndPropagate(item: SupermarketItem) {
+export async function deleteSupermarketItemAndPropagate(item: SupermarketItem, listId?: string) {
+  // Smart Price items are created server-side without a `listId` field, so
+  // never trust item.listId alone — the caller passes the real list id.
+  const list = listId ?? item.listId
   if (item.linkedTripId && item.linkedChecklistId && item.linkedItemId) {
     await deleteDoc(doc(db, 'trips', item.linkedTripId, 'checklists', item.linkedChecklistId, 'items', item.linkedItemId))
   }
@@ -1912,14 +1915,14 @@ export async function deleteSupermarketItemAndPropagate(item: SupermarketItem) {
   // the list so the Smart Price push (addFromSmartPrice) won't recreate it. The
   // item still exists in the Smart Price app — this only excludes it here.
   if (item.sourceApp === 'smartprice' && item.name) {
-    await updateDoc(doc(db, 'supermarketLists', item.listId), {
+    await updateDoc(doc(db, 'supermarketLists', list), {
       dismissedSmartPrice: arrayUnion(item.name.trim().toLowerCase()),
     })
   }
   // An anywhere item (§15) is deleted from *only this store* — the manual way to
   // drop it from a single list while it stays on the others. Its sibling copies
   // are left untouched (buy/rename/qty/camping still sync among the survivors).
-  await deleteSupermarketItem(item.listId, item.id)
+  await deleteSupermarketItem(list, item.id)
 }
 
 // Mark a supermarket item bought/unbought. A camping-flagged item enters the

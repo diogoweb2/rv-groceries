@@ -438,7 +438,7 @@ export function SupermarketDetail() {
   // too (§8/§15). Reached by swipe-right or the row's "⋮" menu.
   async function handleDelete(item: SupermarketItem) {
     setItems(items.filter(i => i.id !== item.id))
-    await deleteSupermarketItemAndPropagate(item)
+    await deleteSupermarketItemAndPropagate(item, id)
   }
 
   async function handleRemove(item: SupermarketItem) {

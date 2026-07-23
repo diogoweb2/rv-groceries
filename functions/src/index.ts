@@ -661,6 +661,7 @@ export const addFromSmartPrice = onRequest(async (req, res) => {
   const maxOrder = itemsSnap.docs.reduce(
     (m, d) => Math.max(m, (d.data().order as number) ?? 0), -1);
   await db.collection(`supermarketLists/${listId}/items`).add({
+    listId,
     name: itemName.trim(),
     qty: "1",
     checked: false,
