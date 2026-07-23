@@ -10,12 +10,7 @@ import type { SupermarketList, Store } from '@/types'
 
 // One active-list card; subscribes its items to show bought/total progress.
 function ListCard({ list, stores, onOpen }: { list: SupermarketList; stores: Store[]; onOpen: () => void }) {
-  // Match the detail view (§15): Smart Price deal items and expired unbought
-  // deals are hidden, so they must not count in the card's bought/total either.
-  const items = useSupermarketItems(list.id).filter(
-    i => i.sourceApp !== 'smartprice' &&
-      !(i.validUntil && Date.parse(i.validUntil) < Date.now() && !i.checked && !i.forCamping)
-  )
+  const items = useSupermarketItems(list.id)
   const bought = items.filter(i => i.checked).length
 
   return (
