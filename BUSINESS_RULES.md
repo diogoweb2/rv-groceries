@@ -456,9 +456,10 @@ supermarket.
     fields are refreshed in place instead of adding a second row.
   - Pushed items carry `sourceApp: 'smartprice'`, a preformatted `priceLabel`
     (e.g. "$6.70 / lb") and `validUntil` (ISO, end of the flyer's last valid day).
-  - **Smart Price items are hidden from the store list.** The supermarket detail view
-    excludes every `sourceApp: 'smartprice'` item — they don't appear in the shopping list
-    and don't count toward the "N/M bought" total or the completion threshold. They still
+  - **Smart Price items are hidden from the store list.** Both the supermarket detail view
+    and the store cards on the home screen exclude every `sourceApp: 'smartprice'` item —
+    they don't appear in the shopping list and don't count toward the "N/M bought" total
+    (on either screen) or the completion threshold. They still
     exist in the data (and count toward the 18:00 digest via `createdAt`); they're just kept
     out of the manual list.
   - **Expired deals disappear automatically:** the UI hides an unbought, non-camping item
