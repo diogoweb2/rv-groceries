@@ -289,6 +289,12 @@ export interface SupermarketList {
   createdAt: string
   completedAt?: string
   completedBy?: UserIdentity
+  /**
+   * Lowercased names of Smart Price items deleted from this list here. The
+   * Smart Price push (§15) skips these so a locally-dismissed deal isn't
+   * recreated; the item still exists in the Smart Price app.
+   */
+  dismissedSmartPrice?: string[]
 }
 
 export interface SupermarketItem {

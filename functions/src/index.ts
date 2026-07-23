@@ -604,8 +604,10 @@ export const addFromSmartPrice = onRequest(async (req, res) => {
     .where("status", "==", "active")
     .get();
   let listId: string;
+  let dismissed: string[] = [];
   if (!listsSnap.empty) {
     listId = listsSnap.docs[0].id;
+    dismissed = (listsSnap.docs[0].data().dismissedSmartPrice as string[]) ?? [];
   } else {
     const ref = await db.collection("supermarketLists").add({
       storeId,
@@ -627,10 +629,18 @@ export const addFromSmartPrice = onRequest(async (req, res) => {
     validUntil: validUntilIso,
   };
 
+  const nameKey = itemName.trim().toLowerCase();
+
+  // The item was deleted in the RV Groceries app (§15): that delete is a local
+  // dismissal, so don't recreate it here. It still lives in the Smart Price app.
+  if (dismissed.includes(nameKey)) {
+    res.json({ok: true, status: "dismissed", store: storeDisplayName});
+    return;
+  }
+
   const itemsSnap = await db
     .collection(`supermarketLists/${listId}/items`)
     .get();
-  const nameKey = itemName.trim().toLowerCase();
   const existing = itemsSnap.docs.find((d) =>
     ((d.data().name as string) ?? "").trim().toLowerCase() === nameKey &&
     d.data().checked !== true);

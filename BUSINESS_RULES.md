@@ -458,6 +458,12 @@ supermarket.
     (e.g. "$6.70 / lb") and `validUntil` (ISO, end of the flyer's last valid day), and render
     that deal line under the item name. They otherwise behave as normal items
     (`updatedBy: diogo`), and count toward the 18:00 digest via `createdAt`.
+  - **Deleting a Smart Price item is a local dismissal (one-way).** Removing a
+    `sourceApp: 'smartprice'` item in this app deletes it only here and records its
+    lowercased name in the list's `dismissedSmartPrice` array. A later Smart Price push of
+    the same name to the same active list is **skipped** (`status: 'dismissed'`), so a
+    dismissed deal is not recreated. The item is unaffected in the Smart Price app. The
+    dismissal is per active list; a fresh list (next shopping trip) starts clean.
   - **Expired deals disappear automatically:** the UI hides an unbought, non-camping item
     whose `validUntil` has passed, and `dailySupermarketCleanup` (04:00) deletes it. Bought
     or camping-flagged items are exempt — they're wanted regardless of the lapsed deal —

@@ -1908,6 +1908,14 @@ export async function deleteSupermarketItemAndPropagate(item: SupermarketItem) {
   if (item.linkedTripId && item.linkedChecklistId && item.linkedItemId) {
     await deleteDoc(doc(db, 'trips', item.linkedTripId, 'checklists', item.linkedChecklistId, 'items', item.linkedItemId))
   }
+  // Deleting a Smart Price item is local to this app (§15): remember its name on
+  // the list so the Smart Price push (addFromSmartPrice) won't recreate it. The
+  // item still exists in the Smart Price app — this only excludes it here.
+  if (item.sourceApp === 'smartprice' && item.name) {
+    await updateDoc(doc(db, 'supermarketLists', item.listId), {
+      dismissedSmartPrice: arrayUnion(item.name.trim().toLowerCase()),
+    })
+  }
   // An anywhere item (§15) is deleted from *only this store* — the manual way to
   // drop it from a single list while it stays on the others. Its sibling copies
   // are left untouched (buy/rename/qty/camping still sync among the survivors).
